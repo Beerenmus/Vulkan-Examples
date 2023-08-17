@@ -1,0 +1,20 @@
+cmake_minimum_required(VERSION 3.14)
+
+project("Raptor-Engine")
+
+set(CMAKE_CXX_STANDARD 11)
+
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${PROJECT_SOURCE_DIR}/bin")
+
+add_subdirectory(external/glfw)
+
+find_package(Vulkan REQUIRED)
+
+add_executable(engine 
+    main.cpp
+)
+
+target_include_directories(engine PUBLIC libs/glfw/include)
+target_link_libraries(engine PUBLIC glfw)
+target_include_directories(engine PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_link_libraries(engine PUBLIC ${Vulkan_LIBRARIES})
