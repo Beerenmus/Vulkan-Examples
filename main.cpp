@@ -5,9 +5,12 @@
 #include <iostream>
 #include <vector>
 
+using PhysicalDeviceList = std::vector<vk::PhysicalDevice>;
+
 struct VulkanContext {
     vk::Instance instance;
     vk::SurfaceKHR surface;
+    vk::PhysicalDevice physicalDevice;
 };
 
 using ExtensionList = std::vector<const char*>;
@@ -76,6 +79,39 @@ bool createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
     return true;
 }
 
+vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& physicalDevices)
+{
+    vk::PhysicalDevice bestDevice = VK_NULL_HANDLE;
+    int bestScore = 0;
+
+    for (const auto& device : physicalDevices) {
+
+        vk::PhysicalDeviceProperties properties = device.getProperties();
+
+        int score = 0;
+
+        switch (properties.deviceType) {
+
+            case vk::PhysicalDeviceType::eDiscreteGpu:
+                score += 1000;
+                break;
+
+            case vk::PhysicalDeviceType::eIntegratedGpu:
+                score += 500;
+                break;
+        }
+
+        score += static_cast<int>(properties.limits.maxMemoryAllocationCount) / 1024;
+
+        if (score > bestScore) {
+            bestDevice = device;
+            bestScore = score;
+        }
+    }
+
+    return bestDevice;
+}
+
 bool initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     ExtensionList extensions;
@@ -85,6 +121,18 @@ bool initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     if(!createVulkanInstance(context, extensions)) return false;
     if(!createVulkanSurface(context, window)) return false;
+
+    PhysicalDeviceList physicalDevices = context->instance.enumeratePhysicalDevices();
+    if(physicalDevices.empty()) {
+        std::cerr << "No physical devices found" << std::endl;
+        return false;
+    }
+
+    context->physicalDevice = choosePhysicalDevice(physicalDevices);
+    if(!context->physicalDevice) {
+        std::cerr << "Failed to find suitable physical device" << std::endl;
+        return false;
+    }
 
     return true;
 }
