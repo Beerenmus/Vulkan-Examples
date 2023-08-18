@@ -1,15 +1,18 @@
+#define GLFW_INCLUDE_VULKAN
+#include <GLFW/glfw3.h>
+
+#include <vulkan/vulkan.hpp>
 #include <iostream>
 #include <vector>
-#include <GLFW/glfw3.h>
-#include <vulkan/vulkan.hpp>
 
 struct VulkanContext {
     vk::Instance instance;
+    vk::SurfaceKHR surface;
 };
 
 using ExtensionList = std::vector<const char*>;
 
-void createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
+bool createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
 
     std::vector<const char*> enabledLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -31,7 +34,10 @@ void createVulkanInstance(VulkanContext* context, ExtensionList enabledExtension
     context->instance = vk::createInstance(instanceCreateInfo);
     if (!context->instance) {
         std::cerr << "Vulkan instance cannot be installed" << std::endl;
+        return false;
     }
+
+    return true;
 }
 
 ExtensionList getRequiredInstanceExtensions() {
@@ -52,29 +58,72 @@ ExtensionList getRequiredInstanceExtensions() {
     return extensionVector;
 }
 
-int main() {
+bool createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
 
-    if(glfwInit() == GLFW_FALSE) {
-        return EXIT_FAILURE;
+    assert(context->instance);
+    assert(window);
+
+    VkSurfaceKHR surface;
+    VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface);
+
+    if(result != VK_SUCCESS) {
+        std::cerr << "Vulkan Surface cannot be installed" << std::endl;
+        return false;
     }
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
+    context->surface = vk::SurfaceKHR(surface);
 
-    VulkanContext context;
+    return true;
+}
+
+bool initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     ExtensionList extensions;
 
     ExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
 
-    createVulkanInstance(&context, extensions);
+    if(!createVulkanInstance(context, extensions)) return false;
+    if(!createVulkanSurface(context, window)) return false;
+
+    return true;
+}
+
+void terminateVulkan(VulkanContext* context) {
+
+    vk::Instance instance = context->instance;
+
+    if(instance && context->surface) {
+        instance.destroySurfaceKHR(context->surface);    
+    }
+
+    if(instance) {
+        instance.destroy();
+    }
+}
+
+int main() {
+
+    if(glfwInit() == GLFW_FALSE) {
+        return EXIT_FAILURE;
+    }
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    GLFWwindow* window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
+
+    VulkanContext context;
+    if(!initVulkan(window, &context)) {
+        terminateVulkan(&context);
+        return EXIT_FAILURE;
+    }
 
     while(!glfwWindowShouldClose(window)) {
 
         glfwPollEvents();
     }
 
-    vkDestroyInstance(context.instance, nullptr);
+    terminateVulkan(&context);
 
     glfwTerminate();
 
