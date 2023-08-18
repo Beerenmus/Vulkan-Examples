@@ -30,8 +30,26 @@ void createVulkanInstance(VulkanContext* context, ExtensionList enabledExtension
     vk::Result result;
     context->instance = vk::createInstance(instanceCreateInfo);
     if (!context->instance) {
-        std::cout << "Vulkan instance cannot be installed" << std::endl;
+        std::cerr << "Vulkan instance cannot be installed" << std::endl;
     }
+}
+
+ExtensionList getRequiredInstanceExtensions() {
+
+    uint32_t count;
+    const char **extensions = glfwGetRequiredInstanceExtensions(&count);
+
+    if (!extensions) {
+        std::cerr << "Failed to retrieve required instance extensions." << std::endl;
+        return std::vector<const char*>();
+    }
+
+    ExtensionList extensionVector;
+    for (uint32_t i = 0; i < count; ++i) {
+        extensionVector.push_back(extensions[i]);
+    }
+
+    return extensionVector;
 }
 
 int main() {
@@ -45,6 +63,10 @@ int main() {
     VulkanContext context;
 
     ExtensionList extensions;
+
+    ExtensionList requiredExtensions = getRequiredInstanceExtensions();
+    extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
+
     createVulkanInstance(&context, extensions);
 
     while(!glfwWindowShouldClose(window)) {
