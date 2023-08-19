@@ -7,13 +7,25 @@
 
 using PhysicalDeviceList = std::vector<vk::PhysicalDevice>;
 
+struct VulkanQueue {
+    uint32_t familyIndex;
+    vk::Queue queue;
+};
+
 struct VulkanContext {
+    
     vk::Instance instance;
     vk::SurfaceKHR surface;
     vk::PhysicalDevice physicalDevice;
+    
+    VulkanQueue graphics;
+
+
+    vk::Device device;
 };
 
 using ExtensionList = std::vector<const char*>;
+using DeviceExtensionList = std::vector<const char*>;
 
 bool createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
 
@@ -112,6 +124,57 @@ vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& p
     return bestDevice;
 }
 
+uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
+
+    uint32_t queueFamilyIndex = 0;
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++) {
+        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+            queueFamilyIndex = i;
+            break;
+        }
+    }
+
+    return queueFamilyIndex;
+}
+
+bool createDevice(VulkanContext* context, DeviceExtensionList extensions) {
+
+    vk::PhysicalDevice physicalDevice = context->physicalDevice;
+    if(!physicalDevice) return false;
+
+    std::vector<vk::QueueFamilyProperties> queueFamilies = physicalDevice.getQueueFamilyProperties();
+    uint32_t familyIndex = findGraphicsQueueFamily(queueFamilies);
+
+    float priorities[] = { 1.0f };
+
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo;
+    deviceQueueCreateInfo.setQueueFamilyIndex(familyIndex);
+    deviceQueueCreateInfo.setQueueCount(1);
+    deviceQueueCreateInfo.setPQueuePriorities(priorities);
+
+    vk::PhysicalDeviceFeatures enabledFeatures = {};
+
+    vk::DeviceCreateInfo createInfo;
+    createInfo.setQueueCreateInfoCount(1);
+    createInfo.setPQueueCreateInfos(&deviceQueueCreateInfo);
+    createInfo.setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()));
+    createInfo.setPpEnabledExtensionNames(extensions.data());
+    createInfo.setPEnabledFeatures(&enabledFeatures);
+
+    context->device = physicalDevice.createDevice(createInfo);
+
+    if (!context->device) {
+        std::cout << " Error: Failed to create vulkan logical device" << std::endl;
+        return false;
+    }
+
+    context->graphics.familyIndex = familyIndex;
+    context->graphics.queue = context->device.getQueue(familyIndex, 0);
+
+    return true;
+}
+
 bool initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     ExtensionList extensions;
@@ -134,12 +197,20 @@ bool initVulkan(GLFWwindow* window, VulkanContext* context) {
         return false;
     }
 
+    DeviceExtensionList deviceExtensions;
+    if(!createDevice(context, deviceExtensions)) return false;
+
     return true;
 }
 
 void terminateVulkan(VulkanContext* context) {
 
     vk::Instance instance = context->instance;
+    vk::Device device = context->device;
+
+    if(device) {
+        device.destroy();
+    }
 
     if(instance && context->surface) {
         instance.destroySurfaceKHR(context->surface);    
