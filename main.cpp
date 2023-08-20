@@ -109,8 +109,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& physicalDevices)
+[[nodiscard]] VulkanContextResult choosePhysicalDevice(VulkanContext* context)
 {
+    std::vector<vk::PhysicalDevice> physicalDevices = context->instance.enumeratePhysicalDevices();
+
     vk::PhysicalDevice bestDevice = VK_NULL_HANDLE;
     int bestScore = 0;
 
@@ -139,7 +141,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
         }
     }
 
-    return bestDevice;
+    if(!bestDevice) return VulkanContextResult::NoSuitablePhysicalDevice;
+    context->physicalDevice = bestDevice;
+
+    return VulkanContextResult::Success;
 }
 
 [[nodiscard]] uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
@@ -193,6 +198,7 @@ std::string vulkanErrorToString(VulkanContextResult result) {
 [[nodiscard]] VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     ExtensionList extensions;
+    DeviceExtensionList deviceExtensions;
 
     ExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
@@ -205,19 +211,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
         return VulkanContextResult::FailedCreateSurface;
     }
     
-    PhysicalDeviceList physicalDevices = context->instance.enumeratePhysicalDevices();
-    if(physicalDevices.empty()) {
-        std::cerr << "No physical devices found" << std::endl;
+    if(choosePhysicalDevice(context) == VulkanContextResult::NoSuitablePhysicalDevice) {
         return VulkanContextResult::NoSuitablePhysicalDevice;
     }
 
-    context->physicalDevice = choosePhysicalDevice(physicalDevices);
-    if(!context->physicalDevice) {
-        //std::cerr << "Failed to find suitable physical device" << std::endl;
-        return VulkanContextResult::NoSuitablePhysicalDevice;
-    }
-
-    DeviceExtensionList deviceExtensions;
     if(createDevice(context, deviceExtensions) == VulkanContextResult::FailedCreateDevice) {
         return VulkanContextResult::FailedCreateDevice;
     }
