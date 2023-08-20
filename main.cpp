@@ -7,6 +7,14 @@
 
 using PhysicalDeviceList = std::vector<vk::PhysicalDevice>;
 
+enum VulkanResult {
+    Success,
+    FailedCreateInstance,
+    FailedCreateSurface,
+    NoSuitablePhysicalDevice,
+    FailedCreateDevice
+};
+
 struct VulkanQueue {
     uint32_t familyIndex;
     vk::Queue queue;
@@ -20,14 +28,30 @@ struct VulkanContext {
     
     VulkanQueue graphics;
 
-
     vk::Device device;
 };
 
 using ExtensionList = std::vector<const char*>;
 using DeviceExtensionList = std::vector<const char*>;
 
-bool createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
+std::string vulkanErrorToString(VulkanResult result) {
+
+    switch (result) {
+
+        case VulkanResult::FailedCreateInstance:
+            return std::string("Vulkan instance cannot be installed");
+        case VulkanResult::FailedCreateSurface:
+            return std::string("Vulkan Surface cannot be installed");
+        case VulkanResult::NoSuitablePhysicalDevice:
+            return std::string("Error: Failed to no suitable physical device");
+        case VulkanResult::FailedCreateDevice:
+            return std::string("Error: Failed to create vulkan logical device");
+    }
+
+    return std::string();
+}
+
+[[nodiscard]] VulkanResult createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
 
     std::vector<const char*> enabledLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -45,17 +69,14 @@ bool createVulkanInstance(VulkanContext* context, ExtensionList enabledExtension
     instanceCreateInfo.setEnabledExtensionCount(static_cast<uint32_t>(enabledExtensions.size()));
     instanceCreateInfo.setPpEnabledExtensionNames(enabledExtensions.data());
    
-    vk::Result result;
-    context->instance = vk::createInstance(instanceCreateInfo);
-    if (!context->instance) {
-        std::cerr << "Vulkan instance cannot be installed" << std::endl;
-        return false;
+    if (vk::Result result = vk::createInstance(&instanceCreateInfo, nullptr, &context->instance); result != vk::Result::eSuccess) {
+        return VulkanResult::FailedCreateInstance;
     }
 
-    return true;
+    return VulkanResult::Success;
 }
 
-ExtensionList getRequiredInstanceExtensions() {
+[[nodiscard]] ExtensionList getRequiredInstanceExtensions() {
 
     uint32_t count;
     const char **extensions = glfwGetRequiredInstanceExtensions(&count);
@@ -73,25 +94,22 @@ ExtensionList getRequiredInstanceExtensions() {
     return extensionVector;
 }
 
-bool createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
+[[nodiscard]] VulkanResult createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
 
     assert(context->instance);
     assert(window);
 
     VkSurfaceKHR surface;
-    VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface);
-
-    if(result != VK_SUCCESS) {
-        std::cerr << "Vulkan Surface cannot be installed" << std::endl;
-        return false;
+    if(VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface); result != VK_SUCCESS) {
+        return VulkanResult::FailedCreateSurface;
     }
 
     context->surface = vk::SurfaceKHR(surface);
 
-    return true;
+    return VulkanResult::Success;
 }
 
-vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& physicalDevices)
+[[nodiscard]] vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& physicalDevices)
 {
     vk::PhysicalDevice bestDevice = VK_NULL_HANDLE;
     int bestScore = 0;
@@ -124,7 +142,7 @@ vk::PhysicalDevice choosePhysicalDevice(const std::vector<vk::PhysicalDevice>& p
     return bestDevice;
 }
 
-uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
+[[nodiscard]] uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
 
     uint32_t queueFamilyIndex = 0;
 
@@ -138,10 +156,10 @@ uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFa
     return queueFamilyIndex;
 }
 
-bool createDevice(VulkanContext* context, DeviceExtensionList extensions) {
+[[nodiscard]] VulkanResult createDevice(VulkanContext* context, DeviceExtensionList extensions) {
 
     vk::PhysicalDevice physicalDevice = context->physicalDevice;
-    if(!physicalDevice) return false;
+    if(!physicalDevice) return FailedCreateDevice;
 
     std::vector<vk::QueueFamilyProperties> queueFamilies = physicalDevice.getQueueFamilyProperties();
     uint32_t familyIndex = findGraphicsQueueFamily(queueFamilies);
@@ -162,45 +180,49 @@ bool createDevice(VulkanContext* context, DeviceExtensionList extensions) {
     createInfo.setPpEnabledExtensionNames(extensions.data());
     createInfo.setPEnabledFeatures(&enabledFeatures);
 
-    context->device = physicalDevice.createDevice(createInfo);
-
-    if (!context->device) {
-        std::cout << " Error: Failed to create vulkan logical device" << std::endl;
-        return false;
+    if (vk::Result result = physicalDevice.createDevice(&createInfo, nullptr, &context->device); result !=vk::Result::eSuccess) {
+        return VulkanResult::FailedCreateDevice;
     }
 
     context->graphics.familyIndex = familyIndex;
     context->graphics.queue = context->device.getQueue(familyIndex, 0);
 
-    return true;
+    return VulkanResult::Success;
 }
 
-bool initVulkan(GLFWwindow* window, VulkanContext* context) {
+[[nodiscard]] VulkanResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     ExtensionList extensions;
 
     ExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
 
-    if(!createVulkanInstance(context, extensions)) return false;
-    if(!createVulkanSurface(context, window)) return false;
-
+    if(createVulkanInstance(context, extensions) == VulkanResult::FailedCreateInstance) {
+        return VulkanResult::FailedCreateInstance;
+    }
+    
+    if(createVulkanSurface(context, window) == VulkanResult::FailedCreateSurface) {
+        return VulkanResult::FailedCreateSurface;
+    }
+    
     PhysicalDeviceList physicalDevices = context->instance.enumeratePhysicalDevices();
     if(physicalDevices.empty()) {
         std::cerr << "No physical devices found" << std::endl;
-        return false;
+        return VulkanResult::NoSuitablePhysicalDevice;
     }
 
     context->physicalDevice = choosePhysicalDevice(physicalDevices);
     if(!context->physicalDevice) {
-        std::cerr << "Failed to find suitable physical device" << std::endl;
-        return false;
+        //std::cerr << "Failed to find suitable physical device" << std::endl;
+        return VulkanResult::NoSuitablePhysicalDevice;
     }
 
     DeviceExtensionList deviceExtensions;
-    if(!createDevice(context, deviceExtensions)) return false;
+    if(createDevice(context, deviceExtensions) == VulkanResult::FailedCreateDevice) {
+        return VulkanResult::FailedCreateDevice;
+    }
 
-    return true;
+    return VulkanResult::Success;
 }
 
 void terminateVulkan(VulkanContext* context) {
@@ -232,8 +254,9 @@ int main() {
     GLFWwindow* window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
 
     VulkanContext context;
-    if(!initVulkan(window, &context)) {
+    if(VulkanResult result = initVulkan(window, &context); result != VulkanResult::Success) {
         terminateVulkan(&context);
+        std::cout << vulkanErrorToString(result) << std::endl;
         return EXIT_FAILURE;
     }
 
