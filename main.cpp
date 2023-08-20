@@ -31,7 +31,7 @@ struct VulkanContext {
     vk::Device device;
 };
 
-using ExtensionList = std::vector<const char*>;
+using InstanceExtensionList = std::vector<const char*>;
 using DeviceExtensionList = std::vector<const char*>;
 
 std::string vulkanErrorToString(VulkanContextResult result) {
@@ -51,7 +51,7 @@ std::string vulkanErrorToString(VulkanContextResult result) {
     return std::string();
 }
 
-[[nodiscard]] VulkanContextResult createVulkanInstance(VulkanContext* context, ExtensionList enabledExtensions) {
+[[nodiscard]] VulkanContextResult createVulkanInstance(VulkanContext* context, InstanceExtensionList enabledExtensions) {
 
     std::vector<const char*> enabledLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -76,7 +76,7 @@ std::string vulkanErrorToString(VulkanContextResult result) {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] ExtensionList getRequiredInstanceExtensions() {
+[[nodiscard]] InstanceExtensionList getRequiredInstanceExtensions() {
 
     uint32_t count;
     const char **extensions = glfwGetRequiredInstanceExtensions(&count);
@@ -86,7 +86,7 @@ std::string vulkanErrorToString(VulkanContextResult result) {
         return std::vector<const char*>();
     }
 
-    ExtensionList extensionVector;
+    InstanceExtensionList extensionVector;
     for (uint32_t i = 0; i < count; ++i) {
         extensionVector.push_back(extensions[i]);
     }
@@ -197,10 +197,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
 
 [[nodiscard]] VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
-    ExtensionList extensions;
+    InstanceExtensionList extensions;
     DeviceExtensionList deviceExtensions;
 
-    ExtensionList requiredExtensions = getRequiredInstanceExtensions();
+    InstanceExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
 
     if(createVulkanInstance(context, extensions) == VulkanContextResult::FailedCreateInstance) {
