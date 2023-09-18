@@ -13,7 +13,8 @@ enum VulkanContextResult {
     FailedCreateSurface,
     NoSuitablePhysicalDevice,
     FailedCreateDevice,
-    FailedCreateSwapchain
+    FailedCreateSwapchain,
+    FailedCreateSwapchainViewImages,
 };
 
 struct VulkanQueue {
@@ -24,6 +25,7 @@ struct VulkanQueue {
 using DeviceExtensionList = std::vector<const char*>;
 using InstanceExtensionList = std::vector<const char*>;
 using VulkanImageList = std::vector<vk::Image>;
+using VulkanImageViewList = std::vector<vk::ImageView>;
 
 struct VulkanContext {
     
@@ -37,7 +39,10 @@ struct VulkanContext {
 
     vk::SwapchainKHR swapchain;
 
+    vk::Format swapchainFormat;
+
     VulkanImageList images;
+    VulkanImageViewList imageViews;
 };
 
 
@@ -55,6 +60,8 @@ std::string vulkanErrorToString(VulkanContextResult result) {
             return std::string("Error: Failed to create vulkan logical device");
         case VulkanContextResult::FailedCreateSwapchain:
             return std::string("Error: Failed to create vulkan swapchain");
+        case VulkanContextResult::FailedCreateSwapchainViewImages:
+            return std::string("Error: Failed to create vulkan image views");
     }
 
     return std::string();
@@ -295,6 +302,32 @@ VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsage
 
     context->images = context->device.getSwapchainImagesKHR(context->swapchain);
 
+    context->swapchainFormat = format;
+
+    return VulkanContextResult::Success;
+}
+
+VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
+
+    if(!context->swapchain || context->images.empty()) return FailedCreateSwapchainViewImages;
+
+    unsigned long amountOfImageViews = context->images.size();
+    context->imageViews.resize(amountOfImageViews);
+
+    vk::ImageViewCreateInfo imageViewCreateInfo;
+    imageViewCreateInfo.setViewType(vk::ImageViewType::e2D);
+    imageViewCreateInfo.setFormat(context->swapchainFormat);
+    imageViewCreateInfo.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+
+    for(unsigned long x = 0; x < amountOfImageViews; x++) {
+
+        imageViewCreateInfo.setImage(context->images[x]);
+
+        if(vk::Result result = context->device.createImageView(&imageViewCreateInfo, nullptr, &context->imageViews[x]); result != vk::Result::eSuccess) {
+            return VulkanContextResult::FailedCreateSwapchainViewImages;
+        }
+    }
+
     return VulkanContextResult::Success;
 }
 
@@ -326,6 +359,10 @@ VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsage
         return VulkanContextResult::FailedCreateSwapchain;
     }
 
+    if(createSwapchainViewImages(context) == VulkanContextResult::FailedCreateSwapchainViewImages) {
+        return FailedCreateSwapchainViewImages;
+    }
+
     return VulkanContextResult::Success;
 }
 
@@ -335,6 +372,11 @@ void terminateVulkan(VulkanContext* context) {
     vk::Device device = context->device;
 
     if(device) {
+        
+        for(vk::ImageView view : context->imageViews) {
+            device.destroyImageView(view);
+        }
+
         device.destroy();
     }
 
