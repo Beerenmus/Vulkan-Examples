@@ -12,13 +12,18 @@ enum VulkanContextResult {
     FailedCreateInstance,
     FailedCreateSurface,
     NoSuitablePhysicalDevice,
-    FailedCreateDevice
+    FailedCreateDevice,
+    FailedCreateSwapchain
 };
 
 struct VulkanQueue {
     uint32_t familyIndex;
     vk::Queue queue;
 };
+
+using DeviceExtensionList = std::vector<const char*>;
+using InstanceExtensionList = std::vector<const char*>;
+using VulkanImageList = std::vector<vk::Image>;
 
 struct VulkanContext {
     
@@ -29,10 +34,12 @@ struct VulkanContext {
     VulkanQueue graphics;
 
     vk::Device device;
+
+    vk::SwapchainKHR swapchain;
+
+    VulkanImageList images;
 };
 
-using InstanceExtensionList = std::vector<const char*>;
-using DeviceExtensionList = std::vector<const char*>;
 
 std::string vulkanErrorToString(VulkanContextResult result) {
 
@@ -46,6 +53,8 @@ std::string vulkanErrorToString(VulkanContextResult result) {
             return std::string("Error: Failed to no suitable physical device");
         case VulkanContextResult::FailedCreateDevice:
             return std::string("Error: Failed to create vulkan logical device");
+        case VulkanContextResult::FailedCreateSwapchain:
+            return std::string("Error: Failed to create vulkan swapchain");
     }
 
     return std::string();
@@ -195,10 +204,104 @@ std::string vulkanErrorToString(VulkanContextResult result) {
     return VulkanContextResult::Success;
 }
 
+vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+
+    vk::PresentModeKHR bestMode = vk::PresentModeKHR::eFifo;
+    
+    for (const auto& availablePresentMode : availablePresentModes) {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
+            return availablePresentMode;
+        }
+        else if (availablePresentMode == vk::PresentModeKHR::eImmediate) {
+            bestMode = availablePresentMode;
+        }
+    }
+    
+    return bestMode;
+}
+
+vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+{
+    vk::Extent2D extent;
+
+    if (capabilities.currentExtent.width == 0xFFFFFFFF) {
+		extent.width = capabilities.minImageExtent.width;
+	}
+
+    else {
+        extent.width = capabilities.currentExtent.width;
+    }
+
+    if (capabilities.currentExtent.height == 0xFFFFFFFF) {
+		extent.height = capabilities.minImageExtent.height;
+	}
+
+    else {
+        extent.height = capabilities.currentExtent.height;
+    }
+
+    return extent;
+}
+
+vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
+
+    uint32_t index = 0;
+    for (uint32_t x=0;x<availableFormats.size();x++) {
+        
+        vk::ImageFormatProperties formatProperties;
+        vk::Result result = physicalDevice.getImageFormatProperties(availableFormats[x].format, vk::ImageType::e2D, vk::ImageTiling::eOptimal, usage, {}, &formatProperties);
+		
+		if(result == vk::Result::eErrorFormatNotSupported) {
+			std::cout << "Swapchain format does not support requested usage flags" << std::endl;
+		} else {
+            index = x;
+			break;
+		}
+    }
+
+    return availableFormats[index];
+}
+
+VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
+
+    vk::SurfaceKHR surface = context->surface;
+
+    auto availableSurfaceFormats = context->physicalDevice.getSurfaceFormatsKHR(surface);
+    auto surfaceCapabilities = context->physicalDevice.getSurfaceCapabilitiesKHR(surface);
+    auto availablePresentModes = context->physicalDevice.getSurfacePresentModesKHR(surface);
+
+    vk::PresentModeKHR presentMode = choosePresentMode(availablePresentModes);
+    vk::Extent2D extent = chooseExtent(surfaceCapabilities);
+	vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(context->physicalDevice, availableSurfaceFormats, usage);
+    vk::Format format = surfaceFormat.format;
+
+	vk::SwapchainCreateInfoKHR createInfo;
+	createInfo.setSurface(surface);
+	createInfo.setMinImageCount(3);
+	createInfo.setImageFormat(format);
+	createInfo.setImageColorSpace(surfaceFormat.colorSpace);
+	createInfo.setImageExtent(surfaceCapabilities.currentExtent);
+	createInfo.setImageArrayLayers(1);
+	createInfo.setImageUsage(usage);
+	createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
+	createInfo.setPreTransform(vk::SurfaceTransformFlagBitsKHR::eIdentity);
+	createInfo.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
+	createInfo.setPresentMode(presentMode);
+	createInfo.setOldSwapchain(context->swapchain ? context->swapchain : vk::SwapchainKHR {});
+
+    if(vk::Result result = context->device.createSwapchainKHR(&createInfo, nullptr, &context->swapchain); result != vk::Result::eSuccess) {
+        return VulkanContextResult::FailedCreateSwapchain;
+    }
+
+    context->images = context->device.getSwapchainImagesKHR(context->swapchain);
+
+    return VulkanContextResult::Success;
+}
+
 [[nodiscard]] VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     InstanceExtensionList extensions;
-    DeviceExtensionList deviceExtensions;
+    DeviceExtensionList deviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
     InstanceExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
@@ -217,6 +320,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
 
     if(createDevice(context, deviceExtensions) == VulkanContextResult::FailedCreateDevice) {
         return VulkanContextResult::FailedCreateDevice;
+    }
+
+    if(createVulkanSwapchain(context, vk::ImageUsageFlagBits::eColorAttachment) == VulkanContextResult::FailedCreateSwapchain) {
+        return VulkanContextResult::FailedCreateSwapchain;
     }
 
     return VulkanContextResult::Success;
