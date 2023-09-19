@@ -15,6 +15,8 @@ enum VulkanContextResult {
     FailedCreateDevice,
     FailedCreateSwapchain,
     FailedCreateSwapchainViewImages,
+    FailedCreateSwapchainFramebuffer,
+    FailedCreateRenderPass
 };
 
 struct VulkanQueue {
@@ -26,6 +28,7 @@ using DeviceExtensionList = std::vector<const char*>;
 using InstanceExtensionList = std::vector<const char*>;
 using VulkanImageList = std::vector<vk::Image>;
 using VulkanImageViewList = std::vector<vk::ImageView>;
+using VulkanFramebufferList = std::vector<vk::Framebuffer>;
 
 struct VulkanContext {
     
@@ -43,6 +46,13 @@ struct VulkanContext {
 
     VulkanImageList images;
     VulkanImageViewList imageViews;
+    
+    vk::RenderPass renderPass;
+
+    uint32_t width; 
+    uint32_t height;
+
+    VulkanFramebufferList framebuffers;
 };
 
 
@@ -62,6 +72,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
             return std::string("Error: Failed to create vulkan swapchain");
         case VulkanContextResult::FailedCreateSwapchainViewImages:
             return std::string("Error: Failed to create vulkan image views");
+        case VulkanContextResult::FailedCreateSwapchainFramebuffer:
+            return std::string("Error: Failed to create vulkan framebuffer");
+        case VulkanContextResult::FailedCreateRenderPass:
+            return std::string("Error: Failed to create vulkan render pass");
     }
 
     return std::string();
@@ -304,12 +318,15 @@ VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsage
 
     context->swapchainFormat = format;
 
+    context->width = extent.width;
+    context->height = extent.height;
+
     return VulkanContextResult::Success;
 }
 
 VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
 
-    if(!context->swapchain || context->images.empty()) return FailedCreateSwapchainViewImages;
+    if(!context->swapchain || context->images.empty()) return VulkanContextResult::FailedCreateSwapchainViewImages;
 
     unsigned long amountOfImageViews = context->images.size();
     context->imageViews.resize(amountOfImageViews);
@@ -327,6 +344,69 @@ VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
             return VulkanContextResult::FailedCreateSwapchainViewImages;
         }
     }
+
+    return VulkanContextResult::Success;
+}
+
+VulkanContextResult createRenderPass(VulkanContext* context) {
+
+    vk::AttachmentDescription attachmentDescription;
+	attachmentDescription.setFormat(context->swapchainFormat);
+	attachmentDescription.setSamples(vk::SampleCountFlagBits::e1);
+	attachmentDescription.setLoadOp(vk::AttachmentLoadOp::eClear);
+	attachmentDescription.setStoreOp(vk::AttachmentStoreOp::eDontCare);
+	attachmentDescription.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
+	attachmentDescription.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
+	attachmentDescription.setInitialLayout(vk::ImageLayout::eUndefined);
+	attachmentDescription.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+
+    vk::AttachmentReference attachmentReference;
+	attachmentReference.setAttachment(0);
+	attachmentReference.setLayout(vk::ImageLayout::eAttachmentOptimal);
+
+    vk::SubpassDescription subpassDescription;
+	subpassDescription.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
+	subpassDescription.setInputAttachmentCount(0);
+	subpassDescription.setPInputAttachments(nullptr);
+
+    vk::RenderPassCreateInfo renderPassCreateInfo;
+	renderPassCreateInfo.setAttachmentCount(1);
+	renderPassCreateInfo.setPAttachments(&attachmentDescription);
+	renderPassCreateInfo.setSubpassCount(1);
+	renderPassCreateInfo.setPSubpasses(&subpassDescription);
+	renderPassCreateInfo.setDependencyCount(0);
+	renderPassCreateInfo.setDependencies(nullptr);
+
+	if(vk::Result result = context->device.createRenderPass(&renderPassCreateInfo, 0, &context->renderPass); result != vk::Result::eSuccess) {
+        return VulkanContextResult::FailedCreateRenderPass;
+    }
+
+    return VulkanContextResult::Success;
+}
+
+VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
+
+    if(context->imageViews.empty()) return VulkanContextResult::FailedCreateSwapchainFramebuffer;
+
+    unsigned long amountOfFramebuffers = context->imageViews.size();
+    context->framebuffers.resize(amountOfFramebuffers);
+
+    vk::FramebufferCreateInfo framebufferCreateInfo;
+    framebufferCreateInfo.setRenderPass(context->renderPass);
+    framebufferCreateInfo.setAttachmentCount(1);
+    framebufferCreateInfo.setWidth(context->width);
+    framebufferCreateInfo.setHeight(context->height);
+    framebufferCreateInfo.setLayers(1);
+
+    for (unsigned long x = 0; x < amountOfFramebuffers; x++) {
+        
+        framebufferCreateInfo.setAttachments(context->imageViews[x]);
+
+        if(vk::Result result = context->device.createFramebuffer(&framebufferCreateInfo, nullptr, &context->framebuffers[x]); result != vk::Result::eSuccess) {
+            return VulkanContextResult::FailedCreateSwapchainFramebuffer;
+        }
+    }
+    
 
     return VulkanContextResult::Success;
 }
@@ -363,6 +443,14 @@ VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
         return FailedCreateSwapchainViewImages;
     }
 
+    if(createRenderPass(context) == VulkanContextResult::FailedCreateRenderPass) {
+        return VulkanContextResult::FailedCreateRenderPass;
+    }
+
+    if(createSwapchainFramebuffers(context) == VulkanContextResult::FailedCreateSwapchainFramebuffer) {
+        return VulkanContextResult::FailedCreateSwapchainFramebuffer;
+    }
+
     return VulkanContextResult::Success;
 }
 
@@ -372,6 +460,12 @@ void terminateVulkan(VulkanContext* context) {
     vk::Device device = context->device;
 
     if(device) {
+        
+        for(vk::Framebuffer framebuffer : context->framebuffers) {
+            device.destroyFramebuffer(framebuffer);
+        }
+
+        device.destroyRenderPass(context->renderPass);
         
         for(vk::ImageView view : context->imageViews) {
             device.destroyImageView(view);
