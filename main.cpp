@@ -21,7 +21,8 @@ enum VulkanContextResult {
     FailedCreateRenderPass,
     FailedCreateCommandPool,
     FailedAllocateCommandBuffer,
-    FailedCreateFence
+    FailedCreateFence,
+    FailedRecordCommandBuffer
 };
 
 struct VulkanQueue {
@@ -96,6 +97,8 @@ NODISCARD std::string vulkanErrorToString(VulkanContextResult result) {
             return std::string("Error: Failed to allocate vulkan command buffer");
         case VulkanContextResult::FailedCreateFence:
             return std::string("Error: Failed to create vulkan fence");
+        case VulkanContextResult::FailedRecordCommandBuffer:
+            return std::string("Error: Failed to record vulkan command buffer");
     }
 
     return std::string();
@@ -480,6 +483,35 @@ NODISCARD VulkanContextResult createFence(VulkanContext* context) {
     return VulkanContextResult::Success;
 }
 
+NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext* context) {
+
+    vk::CommandBufferBeginInfo commandBufferBeginInfo;
+    
+    std::array<float, 4> color { 1, 0, 1, 1}; 
+
+    vk::ClearValue clearValue;
+    clearValue.setColor(color);
+
+    vk::RenderPassBeginInfo renderPassBeginInfo;
+    renderPassBeginInfo.setClearValueCount(1);
+    renderPassBeginInfo.setPClearValues(&clearValue);
+    renderPassBeginInfo.setRenderArea({ {0, 0}, { context->width, context->height }});
+    renderPassBeginInfo.setRenderPass(context->renderPass);
+
+    for (size_t x=0; x < context->commandBuffers.size(); x++) {   
+
+        renderPassBeginInfo.setFramebuffer(context->framebuffers[x]);
+        
+        context->commandBuffers[x].begin(commandBufferBeginInfo);
+        context->commandBuffers[x].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+
+        context->commandBuffers[x].endRenderPass();
+        context->commandBuffers[x].end();
+    }
+    
+    return VulkanContextResult::Success;
+}
+
 NODISCARD VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     InstanceExtensionList extensions;
@@ -531,6 +563,10 @@ NODISCARD VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* cont
         return VulkanContextResult::FailedCreateFence;
     }
 
+    if(recordCommandBuffer(context) == VulkanContextResult::FailedRecordCommandBuffer) {
+        return FailedRecordCommandBuffer;
+    }
+
     return VulkanContextResult::Success;
 }
 
@@ -541,6 +577,11 @@ void terminateVulkan(VulkanContext* context) {
 
     if(device) {
         
+        for (vk::Fence& fence : context->fences) {
+            device.destroyFence(fence);
+        }
+        
+
         device.destroyCommandPool(context->commandPool);
 
         for(vk::Framebuffer framebuffer : context->framebuffers) {
