@@ -1,4 +1,6 @@
 #define GLFW_INCLUDE_VULKAN
+#define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
+
 #include <GLFW/glfw3.h>
 
 #include <vulkan/vulkan.hpp>
@@ -9,7 +11,8 @@
 
 using PhysicalDeviceList = std::vector<vk::PhysicalDevice>;
 
-enum VulkanContextResult {
+enum VulkanContextResult
+{
     Success,
     FailedCreateInstance,
     FailedCreateSurface,
@@ -22,28 +25,33 @@ enum VulkanContextResult {
     FailedCreateCommandPool,
     FailedAllocateCommandBuffer,
     FailedCreateFence,
-    FailedRecordCommandBuffer
+    FailedRecordCommandBuffer,
+    FailedVulkanRendering,
+    FailedCreateSemaphore
 };
 
-struct VulkanQueue {
+struct VulkanQueue
+{
     uint32_t familyIndex;
     vk::Queue queue;
 };
 
-using DeviceExtensionList = std::vector<const char*>;
-using InstanceExtensionList = std::vector<const char*>;
+using DeviceExtensionList = std::vector<const char *>;
+using InstanceExtensionList = std::vector<const char *>;
 using VulkanImageList = std::vector<vk::Image>;
 using VulkanImageViewList = std::vector<vk::ImageView>;
 using VulkanFramebufferList = std::vector<vk::Framebuffer>;
 using VulkanCommandBufferList = std::vector<vk::CommandBuffer>;
 using VulkanFenceList = std::vector<vk::Fence>;
+using VulkanSemaphoreList = std::vector<vk::Semaphore>;
 
-struct VulkanContext {
-    
+struct VulkanContext
+{
+
     vk::Instance instance;
     vk::SurfaceKHR surface;
     vk::PhysicalDevice physicalDevice;
-    
+
     VulkanQueue graphics;
 
     vk::Device device;
@@ -54,10 +62,10 @@ struct VulkanContext {
 
     VulkanImageList images;
     VulkanImageViewList imageViews;
-    
+
     vk::RenderPass renderPass;
 
-    uint32_t width; 
+    uint32_t width;
     uint32_t height;
 
     VulkanFramebufferList framebuffers;
@@ -68,144 +76,177 @@ struct VulkanContext {
     uint32_t amountOfFrames;
 
     VulkanFenceList fences;
+
+    VulkanSemaphoreList waitSemaphore;
+    VulkanSemaphoreList signalSemaphore;
+
+    uint32_t frameIndex = 0;
 };
 
+NODISCARD std::string vulkanErrorToString(VulkanContextResult result)
+{
 
-NODISCARD std::string vulkanErrorToString(VulkanContextResult result) {
+    switch (result)
+    {
 
-    switch (result) {
-
-        case VulkanContextResult::FailedCreateInstance:
-            return std::string("Vulkan instance cannot be installed");
-        case VulkanContextResult::FailedCreateSurface:
-            return std::string("Vulkan Surface cannot be installed");
-        case VulkanContextResult::NoSuitablePhysicalDevice:
-            return std::string("Error: Failed to no suitable physical device");
-        case VulkanContextResult::FailedCreateDevice:
-            return std::string("Error: Failed to create vulkan logical device");
-        case VulkanContextResult::FailedCreateSwapchain:
-            return std::string("Error: Failed to create vulkan swapchain");
-        case VulkanContextResult::FailedCreateSwapchainViewImages:
-            return std::string("Error: Failed to create vulkan image views");
-        case VulkanContextResult::FailedCreateSwapchainFramebuffer:
-            return std::string("Error: Failed to create vulkan framebuffer");
-        case VulkanContextResult::FailedCreateRenderPass:
-            return std::string("Error: Failed to create vulkan render pass");
-        case VulkanContextResult::FailedCreateCommandPool:
-            return std::string("Error: Failed to create vulkan command pool");
-        case VulkanContextResult::FailedAllocateCommandBuffer:
-            return std::string("Error: Failed to allocate vulkan command buffer");
-        case VulkanContextResult::FailedCreateFence:
-            return std::string("Error: Failed to create vulkan fence");
-        case VulkanContextResult::FailedRecordCommandBuffer:
-            return std::string("Error: Failed to record vulkan command buffer");
+    case VulkanContextResult::FailedCreateInstance:
+        return std::string("Vulkan instance cannot be installed");
+    case VulkanContextResult::FailedCreateSurface:
+        return std::string("Vulkan Surface cannot be installed");
+    case VulkanContextResult::NoSuitablePhysicalDevice:
+        return std::string("Error: Failed to no suitable physical device");
+    case VulkanContextResult::FailedCreateDevice:
+        return std::string("Error: Failed to create vulkan logical device");
+    case VulkanContextResult::FailedCreateSwapchain:
+        return std::string("Error: Failed to create vulkan swapchain");
+    case VulkanContextResult::FailedCreateSwapchainViewImages:
+        return std::string("Error: Failed to create vulkan image views");
+    case VulkanContextResult::FailedCreateSwapchainFramebuffer:
+        return std::string("Error: Failed to create vulkan framebuffer");
+    case VulkanContextResult::FailedCreateRenderPass:
+        return std::string("Error: Failed to create vulkan render pass");
+    case VulkanContextResult::FailedCreateCommandPool:
+        return std::string("Error: Failed to create vulkan command pool");
+    case VulkanContextResult::FailedAllocateCommandBuffer:
+        return std::string("Error: Failed to allocate vulkan command buffer");
+    case VulkanContextResult::FailedCreateFence:
+        return std::string("Error: Failed to create vulkan fence");
+    case VulkanContextResult::FailedRecordCommandBuffer:
+        return std::string("Error: Failed to record vulkan command buffer");
+    case VulkanContextResult::FailedCreateSemaphore:
+        return std::string("Error: Failed to create vulkan semaphore");
     }
 
     return std::string();
 }
 
-NODISCARD VulkanContextResult createVulkanInstance(VulkanContext* context, InstanceExtensionList enabledExtensions) {
+NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, InstanceExtensionList enabledExtensions)
+{
 
-    std::vector<const char*> enabledLayers = {
-        "VK_LAYER_KHRONOS_validation"
+    std::vector<const char *> enabledLayers = {
+        "VK_LAYER_KHRONOS_validation"};
+
+    vk::ApplicationInfo applicationInfo {
+        .sType = vk::StructureType::eApplicationInfo,
+        .pNext = nullptr,
+        .pApplicationName = "Vulkan Application",
+        .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
+        .pEngineName = "Vulkan",
+        .engineVersion = VK_MAKE_VERSION(0, 0, 1),
+        .apiVersion = VK_API_VERSION_1_2
     };
 
-    vk::ApplicationInfo applicationInfo;
-    applicationInfo.setPApplicationName("Vulkan");
-    applicationInfo.setApplicationVersion(VK_MAKE_VERSION(0, 0, 1));
-    applicationInfo.setApiVersion(VK_API_VERSION_1_2);
+    vk::InstanceCreateInfo instanceCreateInfo {
+        .sType = vk::StructureType::eInstanceCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .pApplicationInfo = &applicationInfo,
+        .enabledLayerCount = static_cast<uint32_t>(enabledLayers.size()),
+        .ppEnabledLayerNames = enabledLayers.data(),
+        .enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size()),
+        .ppEnabledExtensionNames = enabledExtensions.data()
+    };
 
-    vk::InstanceCreateInfo instanceCreateInfo;
-    instanceCreateInfo.setPApplicationInfo(&applicationInfo);
-    instanceCreateInfo.setEnabledLayerCount(static_cast<uint32_t>(enabledLayers.size()));
-    instanceCreateInfo.setPpEnabledLayerNames(enabledLayers.data());
-    instanceCreateInfo.setEnabledExtensionCount(static_cast<uint32_t>(enabledExtensions.size()));
-    instanceCreateInfo.setPpEnabledExtensionNames(enabledExtensions.data());
-   
-    if (vk::Result result = vk::createInstance(&instanceCreateInfo, nullptr, &context->instance); result != vk::Result::eSuccess) {
+    if (vk::Result result = vk::createInstance(&instanceCreateInfo, nullptr, &context->instance); result != vk::Result::eSuccess)
+    {
         return VulkanContextResult::FailedCreateInstance;
     }
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD InstanceExtensionList getRequiredInstanceExtensions() {
+NODISCARD InstanceExtensionList getRequiredInstanceExtensions()
+{
 
     uint32_t count;
     const char **extensions = glfwGetRequiredInstanceExtensions(&count);
 
-    if (!extensions) {
+    if (!extensions)
+    {
         std::cerr << "Failed to retrieve required instance extensions." << std::endl;
-        return std::vector<const char*>();
+        return std::vector<const char *>();
     }
 
     InstanceExtensionList extensionVector;
-    for (uint32_t i = 0; i < count; ++i) {
+    for (uint32_t i = 0; i < count; ++i)
+    {
         extensionVector.push_back(extensions[i]);
     }
 
     return extensionVector;
 }
 
-NODISCARD VulkanContextResult createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
+NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, GLFWwindow *window)
+{
 
     assert(context->instance);
     assert(window);
 
     VkSurfaceKHR surface;
-    if(VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface); result != VK_SUCCESS) {
+    if (VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface); result != VK_SUCCESS)
+    {
         return VulkanContextResult::FailedCreateSurface;
     }
 
     context->surface = vk::SurfaceKHR(surface);
+    if(!context->surface) {
+        return VulkanContextResult::FailedCreateSurface;
+    }
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext* context)
+NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext *context)
 {
     std::vector<vk::PhysicalDevice> physicalDevices = context->instance.enumeratePhysicalDevices();
 
     vk::PhysicalDevice bestDevice = VK_NULL_HANDLE;
     int bestScore = 0;
 
-    for (const auto& device : physicalDevices) {
+    for (const auto &device : physicalDevices)
+    {
 
         vk::PhysicalDeviceProperties properties = device.getProperties();
 
         int score = 0;
 
-        switch (properties.deviceType) {
+        switch (properties.deviceType)
+        {
 
-            case vk::PhysicalDeviceType::eDiscreteGpu:
-                score += 1000;
-                break;
+        case vk::PhysicalDeviceType::eDiscreteGpu:
+            score += 1000;
+            break;
 
-            case vk::PhysicalDeviceType::eIntegratedGpu:
-                score += 500;
-                break;
+        case vk::PhysicalDeviceType::eIntegratedGpu:
+            score += 500;
+            break;
         }
 
         score += static_cast<int>(properties.limits.maxMemoryAllocationCount) / 1024;
 
-        if (score > bestScore) {
+        if (score > bestScore)
+        {
             bestDevice = device;
             bestScore = score;
         }
     }
 
-    if(!bestDevice) return VulkanContextResult::NoSuitablePhysicalDevice;
+    if (!bestDevice)
+        return VulkanContextResult::NoSuitablePhysicalDevice;
     context->physicalDevice = bestDevice;
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
+NODISCARD uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties> &queueFamilies)
+{
 
     uint32_t queueFamilyIndex = 0;
 
-    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++) {
-        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics) {
+    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++)
+    {
+        if (queueFamilies[i].queueFlags & vk::QueueFlagBits::eGraphics)
+        {
             queueFamilyIndex = i;
             break;
         }
@@ -214,31 +255,42 @@ NODISCARD uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties
     return queueFamilyIndex;
 }
 
-NODISCARD VulkanContextResult createDevice(VulkanContext* context, DeviceExtensionList extensions) {
+NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensionList extensions)
+{
 
     vk::PhysicalDevice physicalDevice = context->physicalDevice;
-    if(!physicalDevice) return FailedCreateDevice;
+    if (!physicalDevice)
+        return FailedCreateDevice;
 
     std::vector<vk::QueueFamilyProperties> queueFamilies = physicalDevice.getQueueFamilyProperties();
     uint32_t familyIndex = findGraphicsQueueFamily(queueFamilies);
 
-    float priorities[] = { 1.0f };
+    float priorities[] = {1.0f};
 
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo;
-    deviceQueueCreateInfo.setQueueFamilyIndex(familyIndex);
-    deviceQueueCreateInfo.setQueueCount(1);
-    deviceQueueCreateInfo.setPQueuePriorities(priorities);
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo {
+        .sType = vk::StructureType::eDeviceQueueCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .queueFamilyIndex = familyIndex,
+        .queueCount = 1,
+        .pQueuePriorities = priorities
+    };
 
     vk::PhysicalDeviceFeatures enabledFeatures = {};
 
-    vk::DeviceCreateInfo createInfo;
-    createInfo.setQueueCreateInfoCount(1);
-    createInfo.setPQueueCreateInfos(&deviceQueueCreateInfo);
-    createInfo.setEnabledExtensionCount(static_cast<uint32_t>(extensions.size()));
-    createInfo.setPpEnabledExtensionNames(extensions.data());
-    createInfo.setPEnabledFeatures(&enabledFeatures);
+    vk::DeviceCreateInfo createInfo {
+        .sType = vk::StructureType::eDeviceCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .queueCreateInfoCount = 1,
+        .pQueueCreateInfos = &deviceQueueCreateInfo,
+        .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
+        .ppEnabledExtensionNames = extensions.data(),
+        .pEnabledFeatures = &enabledFeatures
+    };
 
-    if (vk::Result result = physicalDevice.createDevice(&createInfo, nullptr, &context->device); result !=vk::Result::eSuccess) {
+    if (vk::Result result = physicalDevice.createDevice(&createInfo, nullptr, &context->device); result != vk::Result::eSuccess)
+    {
         return VulkanContextResult::FailedCreateDevice;
     }
 
@@ -248,65 +300,79 @@ NODISCARD VulkanContextResult createDevice(VulkanContext* context, DeviceExtensi
     return VulkanContextResult::Success;
 }
 
-NODISCARD vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+NODISCARD vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR> &availablePresentModes)
+{
 
     vk::PresentModeKHR bestMode = vk::PresentModeKHR::eFifo;
-    
-    for (const auto& availablePresentMode : availablePresentModes) {
-        if (availablePresentMode == vk::PresentModeKHR::eMailbox) {
+
+    for (const auto &availablePresentMode : availablePresentModes)
+    {
+        if (availablePresentMode == vk::PresentModeKHR::eMailbox)
+        {
             return availablePresentMode;
         }
-        else if (availablePresentMode == vk::PresentModeKHR::eImmediate) {
+        else if (availablePresentMode == vk::PresentModeKHR::eImmediate)
+        {
             bestMode = availablePresentMode;
         }
     }
-    
+
     return bestMode;
 }
 
-NODISCARD vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+NODISCARD vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR &capabilities)
 {
     vk::Extent2D extent;
 
-    if (capabilities.currentExtent.width == 0xFFFFFFFF) {
-		extent.width = capabilities.minImageExtent.width;
-	}
+    if (capabilities.currentExtent.width == 0xFFFFFFFF)
+    {
+        extent.width = capabilities.minImageExtent.width;
+    }
 
-    else {
+    else
+    {
         extent.width = capabilities.currentExtent.width;
     }
 
-    if (capabilities.currentExtent.height == 0xFFFFFFFF) {
-		extent.height = capabilities.minImageExtent.height;
-	}
+    if (capabilities.currentExtent.height == 0xFFFFFFFF)
+    {
+        extent.height = capabilities.minImageExtent.height;
+    }
 
-    else {
+    else
+    {
         extent.height = capabilities.currentExtent.height;
     }
 
     return extent;
 }
 
-NODISCARD vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
+NODISCARD vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR> &availableFormats, const vk::ImageUsageFlags usage)
+{
 
     uint32_t index = 0;
-    for (uint32_t x=0;x<availableFormats.size();x++) {
-        
+    for (uint32_t x = 0; x < availableFormats.size(); x++)
+    {
+
         vk::ImageFormatProperties formatProperties;
         vk::Result result = physicalDevice.getImageFormatProperties(availableFormats[x].format, vk::ImageType::e2D, vk::ImageTiling::eOptimal, usage, {}, &formatProperties);
-		
-		if(result == vk::Result::eErrorFormatNotSupported) {
-			std::cout << "Swapchain format does not support requested usage flags" << std::endl;
-		} else {
+
+        if (result == vk::Result::eErrorFormatNotSupported)
+        {
+            std::cout << "Swapchain format does not support requested usage flags" << std::endl;
+        }
+        else
+        {
             index = x;
-			break;
-		}
+            break;
+        }
     }
 
     return availableFormats[index];
 }
 
-NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
+NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, vk::ImageUsageFlags usage)
+{
 
     vk::SurfaceKHR surface = context->surface;
 
@@ -316,24 +382,29 @@ NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::
 
     vk::PresentModeKHR presentMode = choosePresentMode(availablePresentModes);
     vk::Extent2D extent = chooseExtent(surfaceCapabilities);
-	vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(context->physicalDevice, availableSurfaceFormats, usage);
+    vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(context->physicalDevice, availableSurfaceFormats, usage);
     vk::Format format = surfaceFormat.format;
 
-	vk::SwapchainCreateInfoKHR createInfo;
-	createInfo.setSurface(surface);
-	createInfo.setMinImageCount(3);
-	createInfo.setImageFormat(format);
-	createInfo.setImageColorSpace(surfaceFormat.colorSpace);
-	createInfo.setImageExtent(surfaceCapabilities.currentExtent);
-	createInfo.setImageArrayLayers(1);
-	createInfo.setImageUsage(usage);
-	createInfo.setImageSharingMode(vk::SharingMode::eExclusive);
-	createInfo.setPreTransform(vk::SurfaceTransformFlagBitsKHR::eIdentity);
-	createInfo.setCompositeAlpha(vk::CompositeAlphaFlagBitsKHR::eOpaque);
-	createInfo.setPresentMode(presentMode);
-	createInfo.setOldSwapchain(context->swapchain ? context->swapchain : vk::SwapchainKHR {});
+    vk::SwapchainCreateInfoKHR createInfo {
+        .sType = vk::StructureType::eSwapchainCreateInfoKHR,
+        .pNext = nullptr,
+        .flags = {},
+        .surface = surface,
+        .minImageCount = 3,
+        .imageFormat = format,
+        .imageColorSpace = surfaceFormat.colorSpace,
+        .imageExtent = surfaceCapabilities.currentExtent,
+        .imageArrayLayers = 1,
+        .imageUsage = usage,
+        .imageSharingMode = vk::SharingMode::eExclusive,
+        .preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity,
+        .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        .presentMode = vk::PresentModeKHR::eFifo,
+        .oldSwapchain = nullptr
+    };
 
-    if(vk::Result result = context->device.createSwapchainKHR(&createInfo, nullptr, &context->swapchain); result != vk::Result::eSuccess) {
+    if (vk::Result result = context->device.createSwapchainKHR(&createInfo, nullptr, &context->swapchain); result != vk::Result::eSuccess)
+    {
         return VulkanContextResult::FailedCreateSwapchain;
     }
 
@@ -349,22 +420,42 @@ NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
+NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
+{
 
-    if(!context->swapchain || context->images.empty()) return VulkanContextResult::FailedCreateSwapchainViewImages;
+    if (!context->swapchain || context->images.empty())
+        return VulkanContextResult::FailedCreateSwapchainViewImages;
 
     context->imageViews.resize(context->amountOfFrames);
 
-    vk::ImageViewCreateInfo imageViewCreateInfo;
-    imageViewCreateInfo.setViewType(vk::ImageViewType::e2D);
-    imageViewCreateInfo.setFormat(context->swapchainFormat);
-    imageViewCreateInfo.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
+    vk::ImageViewCreateInfo imageViewCreateInfo {
+        .sType = vk::StructureType::eImageViewCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .viewType = vk::ImageViewType::e2D,
+        .format = context->swapchainFormat,
+        .components = { 
+            .r = vk::ComponentSwizzle::eR,
+            .g = vk::ComponentSwizzle::eG, 
+            .b = vk::ComponentSwizzle::eB,
+            .a = vk::ComponentSwizzle::eA 
+        },
+        .subresourceRange { 
+            .aspectMask = vk::ImageAspectFlagBits::eColor, 
+            .baseMipLevel = 0, 
+            .levelCount = 1, 
+            .baseArrayLayer = 0, 
+            .layerCount = 1
+        }
+    };
 
-    for(unsigned long x = 0; x < context->amountOfFrames; x++) {
+    for (unsigned long x = 0; x < context->amountOfFrames; x++)
+    {
 
         imageViewCreateInfo.setImage(context->images[x]);
 
-        if(vk::Result result = context->device.createImageView(&imageViewCreateInfo, nullptr, &context->imageViews[x]); result != vk::Result::eSuccess) {
+        if (vk::Result result = context->device.createImageView(&imageViewCreateInfo, nullptr, &context->imageViews[x]); result != vk::Result::eSuccess)
+        {
             return VulkanContextResult::FailedCreateSwapchainViewImages;
         }
     }
@@ -372,110 +463,161 @@ NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext* context) 
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createRenderPass(VulkanContext* context) {
+NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
+{
 
-    vk::AttachmentDescription attachmentDescription;
-	attachmentDescription.setFormat(context->swapchainFormat);
-	attachmentDescription.setSamples(vk::SampleCountFlagBits::e1);
-	attachmentDescription.setLoadOp(vk::AttachmentLoadOp::eClear);
-	attachmentDescription.setStoreOp(vk::AttachmentStoreOp::eDontCare);
-	attachmentDescription.setStencilLoadOp(vk::AttachmentLoadOp::eDontCare);
-	attachmentDescription.setStencilStoreOp(vk::AttachmentStoreOp::eDontCare);
-	attachmentDescription.setInitialLayout(vk::ImageLayout::eUndefined);
-	attachmentDescription.setFinalLayout(vk::ImageLayout::ePresentSrcKHR);
+    vk::AttachmentDescription attachmentDescription {
 
-    vk::AttachmentReference attachmentReference;
-	attachmentReference.setAttachment(0);
-	attachmentReference.setLayout(vk::ImageLayout::eAttachmentOptimal);
+        .format = context->swapchainFormat,
+        .samples = vk::SampleCountFlagBits::e1,
+        .loadOp = vk::AttachmentLoadOp::eClear,
+        .storeOp = vk::AttachmentStoreOp::eStore,
+        .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
+        .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
+        .initialLayout = vk::ImageLayout::eUndefined,
+        .finalLayout = vk::ImageLayout::ePresentSrcKHR
+    };
 
-    vk::SubpassDescription subpassDescription;
-	subpassDescription.setPipelineBindPoint(vk::PipelineBindPoint::eGraphics);
-	subpassDescription.setInputAttachmentCount(0);
-	subpassDescription.setPInputAttachments(nullptr);
+    vk::AttachmentReference attachmentReference {
+    
+        .attachment = 0,
+        .layout = vk::ImageLayout::eAttachmentOptimal
+    };
 
-    vk::RenderPassCreateInfo renderPassCreateInfo;
-	renderPassCreateInfo.setAttachmentCount(1);
-	renderPassCreateInfo.setPAttachments(&attachmentDescription);
-	renderPassCreateInfo.setSubpassCount(1);
-	renderPassCreateInfo.setPSubpasses(&subpassDescription);
-	renderPassCreateInfo.setDependencyCount(0);
-	renderPassCreateInfo.setDependencies(nullptr);
+    vk::SubpassDescription subpassDescription {
 
-	if(vk::Result result = context->device.createRenderPass(&renderPassCreateInfo, 0, &context->renderPass); result != vk::Result::eSuccess) {
+        .flags = {},
+        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,   
+        .inputAttachmentCount = 0,
+        .pInputAttachments = nullptr,      
+        .colorAttachmentCount = 1,
+        .pColorAttachments = &attachmentReference,
+        .pResolveAttachments = nullptr,   
+        .pDepthStencilAttachment = nullptr,
+        .preserveAttachmentCount = 0,
+        .pPreserveAttachments = nullptr  
+    };
+    /*
+        vk::SubpassDependency subpassDependency;
+        subpassDependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
+        subpassDependency.setDstSubpass(0);
+        subpassDependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        subpassDependency.setSrcAccessMask(vk::AccessFlagBits::eNone);
+        subpassDependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        subpassDependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
+    */
+
+    vk::RenderPassCreateInfo renderPassCreateInfo {
+
+        .attachmentCount = 1,
+        .pAttachments = &attachmentDescription,
+        .subpassCount = 1,
+        .pSubpasses = &subpassDescription,
+        .dependencyCount = 0,
+        .pDependencies = nullptr
+    };
+
+    if (vk::Result result = context->device.createRenderPass(&renderPassCreateInfo, 0, &context->renderPass); result != vk::Result::eSuccess)
+    {
         return VulkanContextResult::FailedCreateRenderPass;
     }
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
+NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context)
+{
 
-    if(context->imageViews.empty()) return VulkanContextResult::FailedCreateSwapchainFramebuffer;
+    if (context->imageViews.empty())
+        return VulkanContextResult::FailedCreateSwapchainFramebuffer;
 
     context->framebuffers.resize(context->amountOfFrames);
 
-    vk::FramebufferCreateInfo framebufferCreateInfo;
-    framebufferCreateInfo.setRenderPass(context->renderPass);
-    framebufferCreateInfo.setAttachmentCount(1);
-    framebufferCreateInfo.setWidth(context->width);
-    framebufferCreateInfo.setHeight(context->height);
-    framebufferCreateInfo.setLayers(1);
+    vk::FramebufferCreateInfo framebufferCreateInfo {
 
-    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
-        
+        .renderPass = context->renderPass,
+        .attachmentCount = 1,
+        .width = context->width,
+        .height = context->height,
+        .layers = 1
+    };
+
+    for (unsigned long x = 0; x < context->amountOfFrames; x++)
+    {
+
         framebufferCreateInfo.setAttachments(context->imageViews[x]);
 
-        if(vk::Result result = context->device.createFramebuffer(&framebufferCreateInfo, nullptr, &context->framebuffers[x]); result != vk::Result::eSuccess) {
+        if (vk::Result result = context->device.createFramebuffer(&framebufferCreateInfo, nullptr, &context->framebuffers[x]); result != vk::Result::eSuccess)
+        {
             return VulkanContextResult::FailedCreateSwapchainFramebuffer;
         }
     }
-    
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createCommandPool(VulkanContext* context) {
+NODISCARD VulkanContextResult createCommandPool(VulkanContext *context)
+{
 
-    if(!context->device) return FailedCreateCommandPool;
+    if (!context->device)
+        return FailedCreateCommandPool;
 
-    vk::CommandPoolCreateInfo commandPoolCreateInfo;
-    commandPoolCreateInfo.setQueueFamilyIndex(context->graphics.familyIndex);
+    vk::CommandPoolCreateInfo commandPoolCreateInfo {
+        .sType = vk::StructureType::eCommandPoolCreateInfo,
+        .pNext = nullptr,
+        .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+        .queueFamilyIndex = context->graphics.familyIndex
+    };
 
-    if(vk::Result result = context->device.createCommandPool(&commandPoolCreateInfo, nullptr, &context->commandPool); result != vk::Result::eSuccess) {
+    if (vk::Result result = context->device.createCommandPool(&commandPoolCreateInfo, nullptr, &context->commandPool); result != vk::Result::eSuccess)
+    {
         return VulkanContextResult::FailedCreateCommandPool;
     }
 
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext* context) {
+NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context)
+{
 
     context->commandBuffers.resize(context->amountOfFrames);
 
-    vk::CommandBufferAllocateInfo commandBufferAllocateInfo;
-    commandBufferAllocateInfo.setCommandBufferCount(1);
-    commandBufferAllocateInfo.setCommandPool(context->commandPool);
-    commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
+    vk::CommandBufferAllocateInfo commandBufferAllocateInfo {
+        .sType = vk::StructureType::eCommandBufferAllocateInfo,
+        .pNext = nullptr,
+        .commandPool = context->commandPool,
+        .level = vk::CommandBufferLevel::ePrimary,
+        .commandBufferCount = 1
+    };
 
-    for(uint32_t x=0; x<context->amountOfFrames; x++) {
-        
-        if(vk::Result result = context->device.allocateCommandBuffers(&commandBufferAllocateInfo, &context->commandBuffers[x]); result != vk::Result::eSuccess) {
+    for (uint32_t x = 0; x < context->amountOfFrames; x++)
+    {
+
+        if (vk::Result result = context->device.allocateCommandBuffers(&commandBufferAllocateInfo, &context->commandBuffers[x]); result != vk::Result::eSuccess)
+        {
             return VulkanContextResult::FailedAllocateCommandBuffer;
         }
     }
-    
+
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createFence(VulkanContext* context) {
+NODISCARD VulkanContextResult createFence(VulkanContext *context)
+{
 
     context->fences.resize(context->amountOfFrames);
 
-    vk::FenceCreateInfo fenceCreateInfo;
+    vk::FenceCreateInfo fenceCreateInfo {
+        .sType = vk::StructureType::eFenceCreateInfo,
+        .pNext = nullptr,
+        .flags = vk::FenceCreateFlagBits::eSignaled
+    };
 
-    for (uint32_t x = 0; x < context->amountOfFrames; x++) {
+    for (uint32_t x = 0; x < context->amountOfFrames; x++)
+    {
 
-        if(vk::Result result = context->device.createFence(&fenceCreateInfo, nullptr, &context->fences[x]); result != vk::Result::eSuccess) {
+        if (vk::Result result = context->device.createFence(&fenceCreateInfo, nullptr, &context->fences[x]); result != vk::Result::eSuccess)
+        {
             return VulkanContextResult::FailedCreateFence;
         }
     }
@@ -483,147 +625,302 @@ NODISCARD VulkanContextResult createFence(VulkanContext* context) {
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext* context) {
+NODISCARD VulkanContextResult createSemaphore(VulkanContext *context)
+{
 
-    vk::CommandBufferBeginInfo commandBufferBeginInfo;
-    
-    std::array<float, 4> color { 1, 0, 1, 1}; 
+    context->waitSemaphore.resize(context->amountOfFrames);
+    context->signalSemaphore.resize(context->amountOfFrames);
 
-    vk::ClearValue clearValue;
-    clearValue.setColor(color);
+    vk::SemaphoreCreateInfo semaphoreCreateInfo {
+        .sType = vk::StructureType::eSemaphoreCreateInfo,
+        .pNext = nullptr,
+        .flags = {}
+    };
 
-    vk::RenderPassBeginInfo renderPassBeginInfo;
-    renderPassBeginInfo.setClearValueCount(1);
-    renderPassBeginInfo.setPClearValues(&clearValue);
-    renderPassBeginInfo.setRenderArea({ {0, 0}, { context->width, context->height }});
-    renderPassBeginInfo.setRenderPass(context->renderPass);
+    for (vk::Semaphore &semaphore : context->signalSemaphore)
+    {
 
-    for (size_t x=0; x < context->commandBuffers.size(); x++) {   
-
-        renderPassBeginInfo.setFramebuffer(context->framebuffers[x]);
-        
-        context->commandBuffers[x].begin(commandBufferBeginInfo);
-        context->commandBuffers[x].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
-
-        context->commandBuffers[x].endRenderPass();
-        context->commandBuffers[x].end();
+        if (vk::Result result = context->device.createSemaphore(&semaphoreCreateInfo, nullptr, &semaphore); result != vk::Result::eSuccess)
+        {
+            return VulkanContextResult::FailedCreateSemaphore;
+        }
     }
-    
+
+    for (vk::Semaphore &semaphore : context->waitSemaphore)
+    {
+
+        if (vk::Result result = context->device.createSemaphore(&semaphoreCreateInfo, nullptr, &semaphore); result != vk::Result::eSuccess)
+        {
+            return VulkanContextResult::FailedCreateSemaphore;
+        }
+    }
+
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
+NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext *context)
+{
+
+    return VulkanContextResult::Success;
+}
+
+NODISCARD VulkanContextResult initVulkan(GLFWwindow *window, VulkanContext *context)
+{
 
     InstanceExtensionList extensions;
-    DeviceExtensionList deviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    DeviceExtensionList deviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     InstanceExtensionList requiredExtensions = getRequiredInstanceExtensions();
     extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
 
-    if(createVulkanInstance(context, extensions) == VulkanContextResult::FailedCreateInstance) {
+    if (createVulkanInstance(context, extensions) == VulkanContextResult::FailedCreateInstance)
+    {
         return VulkanContextResult::FailedCreateInstance;
     }
-    
-    if(createVulkanSurface(context, window) == VulkanContextResult::FailedCreateSurface) {
-        return VulkanContextResult::FailedCreateSurface;
-    }
-    
-    if(choosePhysicalDevice(context) == VulkanContextResult::NoSuitablePhysicalDevice) {
+
+    if (choosePhysicalDevice(context) == VulkanContextResult::NoSuitablePhysicalDevice)
+    {
         return VulkanContextResult::NoSuitablePhysicalDevice;
     }
 
-    if(createDevice(context, deviceExtensions) == VulkanContextResult::FailedCreateDevice) {
+    if (createDevice(context, deviceExtensions) == VulkanContextResult::FailedCreateDevice)
+    {
         return VulkanContextResult::FailedCreateDevice;
     }
 
-    if(createVulkanSwapchain(context, vk::ImageUsageFlagBits::eColorAttachment) == VulkanContextResult::FailedCreateSwapchain) {
+    if (createVulkanSurface(context, window) == VulkanContextResult::FailedCreateSurface)
+    {
+        return VulkanContextResult::FailedCreateSurface;
+    }
+
+    if (createVulkanSwapchain(context, vk::ImageUsageFlagBits::eColorAttachment) == VulkanContextResult::FailedCreateSwapchain)
+    {
         return VulkanContextResult::FailedCreateSwapchain;
     }
 
-    if(createSwapchainViewImages(context) == VulkanContextResult::FailedCreateSwapchainViewImages) {
+    if (createSwapchainViewImages(context) == VulkanContextResult::FailedCreateSwapchainViewImages)
+    {
         return FailedCreateSwapchainViewImages;
     }
 
-    if(createRenderPass(context) == VulkanContextResult::FailedCreateRenderPass) {
+    if (createRenderPass(context) == VulkanContextResult::FailedCreateRenderPass)
+    {
         return VulkanContextResult::FailedCreateRenderPass;
     }
 
-    if(createSwapchainFramebuffers(context) == VulkanContextResult::FailedCreateSwapchainFramebuffer) {
+    if (createSwapchainFramebuffers(context) == VulkanContextResult::FailedCreateSwapchainFramebuffer)
+    {
         return VulkanContextResult::FailedCreateSwapchainFramebuffer;
     }
-    if(createCommandPool(context) == VulkanContextResult::FailedCreateCommandPool) {
+    if (createCommandPool(context) == VulkanContextResult::FailedCreateCommandPool)
+    {
         return VulkanContextResult::FailedCreateCommandPool;
     }
 
-    if(allocateCommandBuffer(context) == VulkanContextResult::FailedAllocateCommandBuffer) {
+    if (allocateCommandBuffer(context) == VulkanContextResult::FailedAllocateCommandBuffer)
+    {
         return VulkanContextResult::FailedAllocateCommandBuffer;
     }
 
-    if(createFence(context) == VulkanContextResult::FailedCreateFence) {
+    if (recordCommandBuffer(context) == VulkanContextResult::FailedRecordCommandBuffer)
+    {
+        return FailedRecordCommandBuffer;
+    }
+
+    if (createFence(context) == VulkanContextResult::FailedCreateFence)
+    {
         return VulkanContextResult::FailedCreateFence;
     }
 
-    if(recordCommandBuffer(context) == VulkanContextResult::FailedRecordCommandBuffer) {
-        return FailedRecordCommandBuffer;
+    if (createSemaphore(context) == VulkanContextResult::FailedCreateSemaphore)
+    {
+        return VulkanContextResult::FailedCreateSemaphore;
     }
 
     return VulkanContextResult::Success;
 }
 
-void terminateVulkan(VulkanContext* context) {
+NODISCARD VulkanContextResult render(VulkanContext *context)
+{
+
+    uint32_t imageIndex;
+
+    if (vk::Result result = context->device.waitForFences(1, &context->fences[context->frameIndex], VK_TRUE, UINT64_MAX); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
+    if (vk::Result result = context->device.resetFences(1, &context->fences[context->frameIndex]); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
+    if (vk::Result result = context->device.acquireNextImageKHR(context->swapchain, UINT64_MAX, context->waitSemaphore[context->frameIndex], {}, &imageIndex); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
+    /* Commandbuffer recording */
+
+    context->commandBuffers[imageIndex].reset();
+
+    vk::CommandBufferBeginInfo commandBufferBeginInfo {
+        .sType = vk::StructureType::eCommandBufferBeginInfo,
+        .pNext = nullptr,
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+    };
+
+    vk::ClearValue clearValue;
+    clearValue.setColor(std::array<float, 4>{0.0f, 0.0f, 1.0f, 1.0f});
+
+    vk::RenderPassBeginInfo renderPassBeginInfo {
+
+        .renderPass = context->renderPass,
+        .framebuffer = context->framebuffers[imageIndex],
+        
+        .renderArea = {
+
+            .offset {
+                .x = 0,
+                .y = 0
+            },
+
+            .extent {
+                .width = context->width, 
+                .height = context->height
+            }
+        },
+
+        .clearValueCount = 1,
+        .pClearValues = &clearValue
+    };
+
+    context->commandBuffers[imageIndex].begin(commandBufferBeginInfo);
+    context->commandBuffers[imageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+    context->commandBuffers[imageIndex].endRenderPass();
+    context->commandBuffers[imageIndex].end();
+
+    vk::PipelineStageFlags pipelineStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+
+    /* Command Buffer submit */
+
+    vk::SubmitInfo submitInfo {
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &context->waitSemaphore[context->frameIndex],
+        .pWaitDstStageMask = &pipelineStage,
+        .commandBufferCount = 1,
+        .pCommandBuffers = &context->commandBuffers[context->frameIndex],
+        .signalSemaphoreCount = 1,
+        .pSignalSemaphores = &context->signalSemaphore[context->frameIndex]
+    };
+
+    if (vk::Result result = context->graphics.queue.submit(1, &submitInfo, context->fences[context->frameIndex]); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
+    vk::PresentInfoKHR presentInfoKHR {
+
+        .waitSemaphoreCount = 1,
+        .pWaitSemaphores = &context->signalSemaphore[context->frameIndex],
+        .swapchainCount = 1,
+        .pSwapchains = &context->swapchain,
+        .pImageIndices = &imageIndex
+    };
+
+    if (vk::Result result = context->graphics.queue.presentKHR(presentInfoKHR); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
+    context->frameIndex = (context->frameIndex + 1) % context->amountOfFrames;
+
+    return VulkanContextResult::Success;
+}
+
+void terminateVulkan(VulkanContext *context)
+{
+
+    vkDeviceWaitIdle(context->device);
 
     vk::Instance instance = context->instance;
     vk::Device device = context->device;
 
-    if(device) {
-        
-        for (vk::Fence& fence : context->fences) {
+    if (device)
+    {
+
+        for (vk::Semaphore &semaphore : context->waitSemaphore)
+        {
+            context->device.destroySemaphore(semaphore);
+        }
+
+        for (vk::Semaphore &semaphore : context->signalSemaphore)
+        {
+            context->device.destroySemaphore(semaphore);
+        }
+
+        for (vk::Fence &fence : context->fences)
+        {
             device.destroyFence(fence);
         }
-        
 
         device.destroyCommandPool(context->commandPool);
 
-        for(vk::Framebuffer framebuffer : context->framebuffers) {
+        for (vk::Framebuffer framebuffer : context->framebuffers)
+        {
             device.destroyFramebuffer(framebuffer);
         }
 
         device.destroyRenderPass(context->renderPass);
-        
-        for(vk::ImageView view : context->imageViews) {
+
+        for (vk::ImageView view : context->imageViews)
+        {
             device.destroyImageView(view);
         }
 
         device.destroy();
     }
 
-    if(instance && context->surface) {
-        instance.destroySurfaceKHR(context->surface);    
+    if (instance && context->surface)
+    {
+        instance.destroySurfaceKHR(context->surface);
     }
 
-    if(instance) {
+    if (instance)
+    {
         instance.destroy();
     }
 }
 
-int main() {
+int main()
+{
 
-    if(glfwInit() == GLFW_FALSE) {
+    if (glfwInit() == GLFW_FALSE)
+    {
         return EXIT_FAILURE;
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-    GLFWwindow* window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
+    GLFWwindow *window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
 
     VulkanContext context;
-    if(VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success) {
+    if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
+    {
         terminateVulkan(&context);
         std::cout << vulkanErrorToString(result) << std::endl;
         return EXIT_FAILURE;
     }
 
-    while(!glfwWindowShouldClose(window)) {
+    while (!glfwWindowShouldClose(window))
+    {
+
+        if (render(&context) != VulkanContextResult::Success)
+        {
+            terminateVulkan(&context);
+            return EXIT_FAILURE;
+        }
 
         glfwPollEvents();
     }
