@@ -16,7 +16,9 @@ enum VulkanContextResult {
     FailedCreateSwapchain,
     FailedCreateSwapchainViewImages,
     FailedCreateSwapchainFramebuffer,
-    FailedCreateRenderPass
+    FailedCreateRenderPass,
+    FailedCreateCommandPool,
+    FailedAllocateCommandBuffer
 };
 
 struct VulkanQueue {
@@ -29,6 +31,7 @@ using InstanceExtensionList = std::vector<const char*>;
 using VulkanImageList = std::vector<vk::Image>;
 using VulkanImageViewList = std::vector<vk::ImageView>;
 using VulkanFramebufferList = std::vector<vk::Framebuffer>;
+using VulkanCommandBufferList = std::vector<vk::CommandBuffer>;
 
 struct VulkanContext {
     
@@ -53,10 +56,15 @@ struct VulkanContext {
     uint32_t height;
 
     VulkanFramebufferList framebuffers;
+
+    vk::CommandPool commandPool;
+    VulkanCommandBufferList commandBuffers;
+
+    uint32_t amountOfFrames;
 };
 
 
-std::string vulkanErrorToString(VulkanContextResult result) {
+[[nodiscard]] std::string vulkanErrorToString(VulkanContextResult result) {
 
     switch (result) {
 
@@ -76,6 +84,10 @@ std::string vulkanErrorToString(VulkanContextResult result) {
             return std::string("Error: Failed to create vulkan framebuffer");
         case VulkanContextResult::FailedCreateRenderPass:
             return std::string("Error: Failed to create vulkan render pass");
+        case VulkanContextResult::FailedCreateCommandPool:
+            return std::string("Error: Failed to create vulkan command pool");
+        case VulkanContextResult::FailedAllocateCommandBuffer:
+            return std::string("Error: Failed to allocate vulkan command buffer");
     }
 
     return std::string();
@@ -225,7 +237,7 @@ std::string vulkanErrorToString(VulkanContextResult result) {
     return VulkanContextResult::Success;
 }
 
-vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+[[nodiscard]] vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
 
     vk::PresentModeKHR bestMode = vk::PresentModeKHR::eFifo;
     
@@ -241,7 +253,7 @@ vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& avai
     return bestMode;
 }
 
-vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+[[nodiscard]] vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
 {
     vk::Extent2D extent;
 
@@ -264,7 +276,7 @@ vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
     return extent;
 }
 
-vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
+[[nodiscard]] vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
 
     uint32_t index = 0;
     for (uint32_t x=0;x<availableFormats.size();x++) {
@@ -283,7 +295,7 @@ vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice
     return availableFormats[index];
 }
 
-VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
+[[nodiscard]] VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
 
     vk::SurfaceKHR surface = context->surface;
 
@@ -321,22 +333,23 @@ VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsage
     context->width = extent.width;
     context->height = extent.height;
 
+    context->amountOfFrames = context->images.size();
+
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
+[[nodiscard]] VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
 
     if(!context->swapchain || context->images.empty()) return VulkanContextResult::FailedCreateSwapchainViewImages;
 
-    unsigned long amountOfImageViews = context->images.size();
-    context->imageViews.resize(amountOfImageViews);
+    context->imageViews.resize(context->amountOfFrames);
 
     vk::ImageViewCreateInfo imageViewCreateInfo;
     imageViewCreateInfo.setViewType(vk::ImageViewType::e2D);
     imageViewCreateInfo.setFormat(context->swapchainFormat);
     imageViewCreateInfo.setSubresourceRange({ vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 });
 
-    for(unsigned long x = 0; x < amountOfImageViews; x++) {
+    for(unsigned long x = 0; x < context->amountOfFrames; x++) {
 
         imageViewCreateInfo.setImage(context->images[x]);
 
@@ -348,7 +361,7 @@ VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult createRenderPass(VulkanContext* context) {
+[[nodiscard]] VulkanContextResult createRenderPass(VulkanContext* context) {
 
     vk::AttachmentDescription attachmentDescription;
 	attachmentDescription.setFormat(context->swapchainFormat);
@@ -384,12 +397,11 @@ VulkanContextResult createRenderPass(VulkanContext* context) {
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
+[[nodiscard]] VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
 
     if(context->imageViews.empty()) return VulkanContextResult::FailedCreateSwapchainFramebuffer;
 
-    unsigned long amountOfFramebuffers = context->imageViews.size();
-    context->framebuffers.resize(amountOfFramebuffers);
+    context->framebuffers.resize(context->amountOfFrames);
 
     vk::FramebufferCreateInfo framebufferCreateInfo;
     framebufferCreateInfo.setRenderPass(context->renderPass);
@@ -398,7 +410,7 @@ VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
     framebufferCreateInfo.setHeight(context->height);
     framebufferCreateInfo.setLayers(1);
 
-    for (unsigned long x = 0; x < amountOfFramebuffers; x++) {
+    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
         
         framebufferCreateInfo.setAttachments(context->imageViews[x]);
 
@@ -408,6 +420,39 @@ VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
     }
     
 
+    return VulkanContextResult::Success;
+}
+
+[[nodiscard]] VulkanContextResult createCommandPool(VulkanContext* context) {
+
+    if(!context->device) return FailedCreateCommandPool;
+
+    vk::CommandPoolCreateInfo commandPoolCreateInfo;
+    commandPoolCreateInfo.setQueueFamilyIndex(context->graphics.familyIndex);
+
+    if(vk::Result result = context->device.createCommandPool(&commandPoolCreateInfo, nullptr, &context->commandPool); result != vk::Result::eSuccess) {
+        return VulkanContextResult::FailedCreateCommandPool;
+    }
+
+    return VulkanContextResult::Success;
+}
+
+[[nodiscard]] VulkanContextResult allocateCommandBuffer(VulkanContext* context) {
+
+    context->commandBuffers.resize(context->amountOfFrames);
+
+    vk::CommandBufferAllocateInfo commandBufferAllocateInfo;
+    commandBufferAllocateInfo.setCommandBufferCount(1);
+    commandBufferAllocateInfo.setCommandPool(context->commandPool);
+    commandBufferAllocateInfo.setLevel(vk::CommandBufferLevel::ePrimary);
+
+    for(uint32_t x=0; x<context->amountOfFrames; x++) {
+        
+        if(vk::Result result = context->device.allocateCommandBuffers(&commandBufferAllocateInfo, &context->commandBuffers[x]); result != vk::Result::eSuccess) {
+            return VulkanContextResult::FailedAllocateCommandBuffer;
+        }
+    }
+    
     return VulkanContextResult::Success;
 }
 
@@ -450,6 +495,13 @@ VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
     if(createSwapchainFramebuffers(context) == VulkanContextResult::FailedCreateSwapchainFramebuffer) {
         return VulkanContextResult::FailedCreateSwapchainFramebuffer;
     }
+    if(createCommandPool(context) == VulkanContextResult::FailedCreateCommandPool) {
+        return VulkanContextResult::FailedCreateCommandPool;
+    }
+
+    if(allocateCommandBuffer(context) == VulkanContextResult::FailedAllocateCommandBuffer) {
+        return VulkanContextResult::FailedAllocateCommandBuffer;
+    }
 
     return VulkanContextResult::Success;
 }
@@ -461,6 +513,8 @@ void terminateVulkan(VulkanContext* context) {
 
     if(device) {
         
+        device.destroyCommandPool(context->commandPool);
+
         for(vk::Framebuffer framebuffer : context->framebuffers) {
             device.destroyFramebuffer(framebuffer);
         }
