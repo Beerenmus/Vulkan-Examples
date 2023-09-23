@@ -5,6 +5,8 @@
 #include <iostream>
 #include <vector>
 
+#define NODISCARD [[nodiscard]]
+
 using PhysicalDeviceList = std::vector<vk::PhysicalDevice>;
 
 enum VulkanContextResult {
@@ -18,7 +20,8 @@ enum VulkanContextResult {
     FailedCreateSwapchainFramebuffer,
     FailedCreateRenderPass,
     FailedCreateCommandPool,
-    FailedAllocateCommandBuffer
+    FailedAllocateCommandBuffer,
+    FailedCreateFence
 };
 
 struct VulkanQueue {
@@ -32,6 +35,7 @@ using VulkanImageList = std::vector<vk::Image>;
 using VulkanImageViewList = std::vector<vk::ImageView>;
 using VulkanFramebufferList = std::vector<vk::Framebuffer>;
 using VulkanCommandBufferList = std::vector<vk::CommandBuffer>;
+using VulkanFenceList = std::vector<vk::Fence>;
 
 struct VulkanContext {
     
@@ -61,10 +65,12 @@ struct VulkanContext {
     VulkanCommandBufferList commandBuffers;
 
     uint32_t amountOfFrames;
+
+    VulkanFenceList fences;
 };
 
 
-[[nodiscard]] std::string vulkanErrorToString(VulkanContextResult result) {
+NODISCARD std::string vulkanErrorToString(VulkanContextResult result) {
 
     switch (result) {
 
@@ -88,12 +94,14 @@ struct VulkanContext {
             return std::string("Error: Failed to create vulkan command pool");
         case VulkanContextResult::FailedAllocateCommandBuffer:
             return std::string("Error: Failed to allocate vulkan command buffer");
+        case VulkanContextResult::FailedCreateFence:
+            return std::string("Error: Failed to create vulkan fence");
     }
 
     return std::string();
 }
 
-[[nodiscard]] VulkanContextResult createVulkanInstance(VulkanContext* context, InstanceExtensionList enabledExtensions) {
+NODISCARD VulkanContextResult createVulkanInstance(VulkanContext* context, InstanceExtensionList enabledExtensions) {
 
     std::vector<const char*> enabledLayers = {
         "VK_LAYER_KHRONOS_validation"
@@ -118,7 +126,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] InstanceExtensionList getRequiredInstanceExtensions() {
+NODISCARD InstanceExtensionList getRequiredInstanceExtensions() {
 
     uint32_t count;
     const char **extensions = glfwGetRequiredInstanceExtensions(&count);
@@ -136,7 +144,7 @@ struct VulkanContext {
     return extensionVector;
 }
 
-[[nodiscard]] VulkanContextResult createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
+NODISCARD VulkanContextResult createVulkanSurface(VulkanContext* context, GLFWwindow* window) {
 
     assert(context->instance);
     assert(window);
@@ -151,7 +159,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult choosePhysicalDevice(VulkanContext* context)
+NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext* context)
 {
     std::vector<vk::PhysicalDevice> physicalDevices = context->instance.enumeratePhysicalDevices();
 
@@ -189,7 +197,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
+NODISCARD uint32_t findGraphicsQueueFamily(std::vector<vk::QueueFamilyProperties>& queueFamilies) {
 
     uint32_t queueFamilyIndex = 0;
 
@@ -203,7 +211,7 @@ struct VulkanContext {
     return queueFamilyIndex;
 }
 
-[[nodiscard]] VulkanContextResult createDevice(VulkanContext* context, DeviceExtensionList extensions) {
+NODISCARD VulkanContextResult createDevice(VulkanContext* context, DeviceExtensionList extensions) {
 
     vk::PhysicalDevice physicalDevice = context->physicalDevice;
     if(!physicalDevice) return FailedCreateDevice;
@@ -237,7 +245,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
+NODISCARD vk::PresentModeKHR choosePresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes) {
 
     vk::PresentModeKHR bestMode = vk::PresentModeKHR::eFifo;
     
@@ -253,7 +261,7 @@ struct VulkanContext {
     return bestMode;
 }
 
-[[nodiscard]] vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
+NODISCARD vk::Extent2D chooseExtent(const vk::SurfaceCapabilitiesKHR& capabilities)
 {
     vk::Extent2D extent;
 
@@ -276,7 +284,7 @@ struct VulkanContext {
     return extent;
 }
 
-[[nodiscard]] vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
+NODISCARD vk::SurfaceFormatKHR chooseSurfaceFormat(const vk::PhysicalDevice physicalDevice, const std::vector<vk::SurfaceFormatKHR>& availableFormats, const vk::ImageUsageFlags usage) {
 
     uint32_t index = 0;
     for (uint32_t x=0;x<availableFormats.size();x++) {
@@ -295,7 +303,7 @@ struct VulkanContext {
     return availableFormats[index];
 }
 
-[[nodiscard]] VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
+NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext* context, vk::ImageUsageFlags usage) {
 
     vk::SurfaceKHR surface = context->surface;
 
@@ -338,7 +346,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
+NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext* context) {
 
     if(!context->swapchain || context->images.empty()) return VulkanContextResult::FailedCreateSwapchainViewImages;
 
@@ -361,7 +369,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult createRenderPass(VulkanContext* context) {
+NODISCARD VulkanContextResult createRenderPass(VulkanContext* context) {
 
     vk::AttachmentDescription attachmentDescription;
 	attachmentDescription.setFormat(context->swapchainFormat);
@@ -397,7 +405,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
+NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext* context) {
 
     if(context->imageViews.empty()) return VulkanContextResult::FailedCreateSwapchainFramebuffer;
 
@@ -423,7 +431,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult createCommandPool(VulkanContext* context) {
+NODISCARD VulkanContextResult createCommandPool(VulkanContext* context) {
 
     if(!context->device) return FailedCreateCommandPool;
 
@@ -437,7 +445,7 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult allocateCommandBuffer(VulkanContext* context) {
+NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext* context) {
 
     context->commandBuffers.resize(context->amountOfFrames);
 
@@ -456,7 +464,23 @@ struct VulkanContext {
     return VulkanContextResult::Success;
 }
 
-[[nodiscard]] VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
+NODISCARD VulkanContextResult createFence(VulkanContext* context) {
+
+    context->fences.resize(context->amountOfFrames);
+
+    vk::FenceCreateInfo fenceCreateInfo;
+
+    for (uint32_t x = 0; x < context->amountOfFrames; x++) {
+
+        if(vk::Result result = context->device.createFence(&fenceCreateInfo, nullptr, &context->fences[x]); result != vk::Result::eSuccess) {
+            return VulkanContextResult::FailedCreateFence;
+        }
+    }
+
+    return VulkanContextResult::Success;
+}
+
+NODISCARD VulkanContextResult initVulkan(GLFWwindow* window, VulkanContext* context) {
 
     InstanceExtensionList extensions;
     DeviceExtensionList deviceExtensions { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
@@ -501,6 +525,10 @@ struct VulkanContext {
 
     if(allocateCommandBuffer(context) == VulkanContextResult::FailedAllocateCommandBuffer) {
         return VulkanContextResult::FailedAllocateCommandBuffer;
+    }
+
+    if(createFence(context) == VulkanContextResult::FailedCreateFence) {
+        return VulkanContextResult::FailedCreateFence;
     }
 
     return VulkanContextResult::Success;
