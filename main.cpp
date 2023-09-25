@@ -745,17 +745,17 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
 
     uint32_t imageIndex;
 
+    if (vk::Result result = context->device.acquireNextImageKHR(context->swapchain, UINT64_MAX, context->waitSemaphore[context->frameIndex], {}, &imageIndex); result != vk::Result::eSuccess)
+    {
+        return VulkanContextResult::FailedVulkanRendering;
+    }
+
     if (vk::Result result = context->device.waitForFences(1, &context->fences[context->frameIndex], VK_TRUE, UINT64_MAX); result != vk::Result::eSuccess)
     {
         return VulkanContextResult::FailedVulkanRendering;
     }
 
     if (vk::Result result = context->device.resetFences(1, &context->fences[context->frameIndex]); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    if (vk::Result result = context->device.acquireNextImageKHR(context->swapchain, UINT64_MAX, context->waitSemaphore[context->frameIndex], {}, &imageIndex); result != vk::Result::eSuccess)
     {
         return VulkanContextResult::FailedVulkanRendering;
     }
@@ -841,9 +841,6 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
 
 void terminateVulkan(VulkanContext *context)
 {
-
-    vkDeviceWaitIdle(context->device);
-
     vk::Instance instance = context->instance;
     vk::Device device = context->device;
 
@@ -902,6 +899,7 @@ int main()
     }
 
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
 
     GLFWwindow *window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
 
@@ -913,9 +911,10 @@ int main()
         return EXIT_FAILURE;
     }
 
+    glfwShowWindow(window);
+
     while (!glfwWindowShouldClose(window))
     {
-
         if (render(&context) != VulkanContextResult::Success)
         {
             terminateVulkan(&context);
@@ -925,6 +924,12 @@ int main()
         glfwPollEvents();
     }
 
+    glfwHideWindow(window);
+
+    vkDeviceWaitIdle(context.device);
+
+
+    glfwDestroyWindow(window);
     terminateVulkan(&context);
 
     glfwTerminate();
