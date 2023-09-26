@@ -1,7 +1,8 @@
 #define GLFW_INCLUDE_VULKAN
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 
 #include <vulkan/vulkan.hpp>
 #include <iostream>
@@ -159,32 +160,21 @@ NODISCARD InstanceExtensionList getRequiredInstanceExtensions()
 {
 
     uint32_t count;
-    const char **extensions = glfwGetRequiredInstanceExtensions(&count);
+    SDL_Vulkan_GetInstanceExtensions(&count, nullptr);
+    std::vector<const char*> extensions(count);
+    SDL_Vulkan_GetInstanceExtensions(&count, extensions.data());
 
-    if (!extensions)
-    {
-        std::cerr << "Failed to retrieve required instance extensions." << std::endl;
-        return std::vector<const char *>();
-    }
-
-    InstanceExtensionList extensionVector;
-    for (uint32_t i = 0; i < count; ++i)
-    {
-        extensionVector.push_back(extensions[i]);
-    }
-
-    return extensionVector;
+    return extensions;
 }
 
-NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, GLFWwindow *window)
+NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, SDL_Window *window)
 {
 
     assert(context->instance);
     assert(window);
 
     VkSurfaceKHR surface;
-    if (VkResult result = glfwCreateWindowSurface(context->instance, window, nullptr, &surface); result != VK_SUCCESS)
-    {
+    if(SDL_Vulkan_CreateSurface(window, context->instance, &surface) != SDL_TRUE) {
         return VulkanContextResult::FailedCreateSurface;
     }
 
@@ -200,7 +190,7 @@ NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext *context)
 {
     std::vector<vk::PhysicalDevice> physicalDevices = context->instance.enumeratePhysicalDevices();
 
-    vk::PhysicalDevice bestDevice = VK_NULL_HANDLE;
+    vk::PhysicalDevice bestDevice;
     int bestScore = 0;
 
     for (const auto &device : physicalDevices)
@@ -664,7 +654,7 @@ NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext *context)
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult initVulkan(GLFWwindow *window, VulkanContext *context)
+NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *context)
 {
 
     InstanceExtensionList extensions;
@@ -893,17 +883,31 @@ void terminateVulkan(VulkanContext *context)
     }
 }
 
+bool handleMessage() {
+
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+		    	case SDL_EVENT_QUIT:
+			    	return false;
+			default:
+				break;
+			}
+		}
+        
+		return true;
+	}
+
 int main()
 {
 
-    if (glfwInit() == GLFW_FALSE)
+    if (SDL_Init(SDL_INIT_VIDEO))
     {
         return EXIT_FAILURE;
     }
 
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    SDL_Window* window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
 
-    GLFWwindow *window = glfwCreateWindow(1280, 720, "Hello Vulkan", 0, 0);
 
     VulkanContext context;
     if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
@@ -913,21 +917,22 @@ int main()
         return EXIT_FAILURE;
     }
 
-    while (!glfwWindowShouldClose(window))
-    {
+    SDL_ShowWindow(window);
+
+    while (handleMessage()) {
 
         if (render(&context) != VulkanContextResult::Success)
         {
             terminateVulkan(&context);
             return EXIT_FAILURE;
         }
-
-        glfwPollEvents();
     }
+
+    SDL_HideWindow(window);
 
     terminateVulkan(&context);
 
-    glfwTerminate();
+    SDL_Quit();
 
     return EXIT_SUCCESS;
 }
