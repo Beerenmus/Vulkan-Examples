@@ -7,6 +7,8 @@
 #include <vulkan/vulkan.hpp>
 #include <iostream>
 #include <vector>
+#include <optional>
+#include <fstream>
 
 #define NODISCARD [[nodiscard]]
 
@@ -35,6 +37,40 @@ struct VulkanQueue
 {
     uint32_t familyIndex;
     vk::Queue queue;
+};
+
+struct VulkanBuffer
+{
+    vk::Buffer buffer;
+    vk::DeviceMemory memory;
+    vk::BufferUsageFlagBits usage;
+};
+
+class SVulkanPipeline {
+    
+    public:
+        vk::PipelineLayout layout;
+        vk::Pipeline pipeline;
+
+    public:
+        constexpr SVulkanPipeline() = default;
+        constexpr SVulkanPipeline(SVulkanPipeline& another) : layout(another.layout), pipeline(another.pipeline) {}
+
+        constexpr SVulkanPipeline(SVulkanPipeline&& another) : layout(std::move(another.layout)), pipeline(std::move(another.pipeline)) {
+            another.layout = vk::PipelineLayout();
+            another.pipeline = vk::Pipeline();
+        }
+        
+        constexpr SVulkanPipeline operator = (SVulkanPipeline& another) {
+            
+            layout = another.layout;
+            pipeline = another.pipeline;
+
+            return *this;
+        }
+        
+        constexpr SVulkanPipeline operator = (SVulkanPipeline&&) = delete;
+        ~SVulkanPipeline() = default;
 };
 
 using DeviceExtensionList = std::vector<const char *>;
@@ -127,17 +163,16 @@ NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, Insta
     std::vector<const char *> enabledLayers = {
         "VK_LAYER_KHRONOS_validation"};
 
-    vk::ApplicationInfo applicationInfo {
+    vk::ApplicationInfo applicationInfo{
         .sType = vk::StructureType::eApplicationInfo,
         .pNext = nullptr,
         .pApplicationName = "Vulkan Application",
         .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
         .pEngineName = "Vulkan",
         .engineVersion = VK_MAKE_VERSION(0, 0, 1),
-        .apiVersion = VK_API_VERSION_1_2
-    };
+        .apiVersion = VK_API_VERSION_1_2};
 
-    vk::InstanceCreateInfo instanceCreateInfo {
+    vk::InstanceCreateInfo instanceCreateInfo{
         .sType = vk::StructureType::eInstanceCreateInfo,
         .pNext = nullptr,
         .flags = {},
@@ -145,8 +180,7 @@ NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, Insta
         .enabledLayerCount = static_cast<uint32_t>(enabledLayers.size()),
         .ppEnabledLayerNames = enabledLayers.data(),
         .enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size()),
-        .ppEnabledExtensionNames = enabledExtensions.data()
-    };
+        .ppEnabledExtensionNames = enabledExtensions.data()};
 
     if (vk::Result result = vk::createInstance(&instanceCreateInfo, nullptr, &context->instance); result != vk::Result::eSuccess)
     {
@@ -161,7 +195,7 @@ NODISCARD InstanceExtensionList getRequiredInstanceExtensions()
 
     uint32_t count;
     SDL_Vulkan_GetInstanceExtensions(&count, nullptr);
-    std::vector<const char*> extensions(count);
+    std::vector<const char *> extensions(count);
     SDL_Vulkan_GetInstanceExtensions(&count, extensions.data());
 
     return extensions;
@@ -174,12 +208,14 @@ NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, SDL_Wi
     assert(window);
 
     VkSurfaceKHR surface;
-    if(SDL_Vulkan_CreateSurface(window, context->instance, &surface) != SDL_TRUE) {
+    if (SDL_Vulkan_CreateSurface(window, context->instance, &surface) != SDL_TRUE)
+    {
         return VulkanContextResult::FailedCreateSurface;
     }
 
     context->surface = vk::SurfaceKHR(surface);
-    if(!context->surface) {
+    if (!context->surface)
+    {
         return VulkanContextResult::FailedCreateSurface;
     }
 
@@ -257,18 +293,17 @@ NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensi
 
     float priorities[] = {1.0f};
 
-    vk::DeviceQueueCreateInfo deviceQueueCreateInfo {
+    vk::DeviceQueueCreateInfo deviceQueueCreateInfo{
         .sType = vk::StructureType::eDeviceQueueCreateInfo,
         .pNext = nullptr,
         .flags = {},
         .queueFamilyIndex = familyIndex,
         .queueCount = 1,
-        .pQueuePriorities = priorities
-    };
+        .pQueuePriorities = priorities};
 
     vk::PhysicalDeviceFeatures enabledFeatures = {};
 
-    vk::DeviceCreateInfo createInfo {
+    vk::DeviceCreateInfo createInfo{
         .sType = vk::StructureType::eDeviceCreateInfo,
         .pNext = nullptr,
         .flags = {},
@@ -276,8 +311,7 @@ NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensi
         .pQueueCreateInfos = &deviceQueueCreateInfo,
         .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
-        .pEnabledFeatures = &enabledFeatures
-    };
+        .pEnabledFeatures = &enabledFeatures};
 
     if (vk::Result result = physicalDevice.createDevice(&createInfo, nullptr, &context->device); result != vk::Result::eSuccess)
     {
@@ -375,7 +409,7 @@ NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, vk::
     vk::SurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(context->physicalDevice, availableSurfaceFormats, usage);
     vk::Format format = surfaceFormat.format;
 
-    vk::SwapchainCreateInfoKHR createInfo {
+    vk::SwapchainCreateInfoKHR createInfo{
         .sType = vk::StructureType::eSwapchainCreateInfoKHR,
         .pNext = nullptr,
         .flags = {},
@@ -390,8 +424,7 @@ NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, vk::
         .preTransform = vk::SurfaceTransformFlagBitsKHR::eIdentity,
         .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
         .presentMode = vk::PresentModeKHR::eFifo,
-        .oldSwapchain = nullptr
-    };
+        .oldSwapchain = nullptr};
 
     if (vk::Result result = context->device.createSwapchainKHR(&createInfo, nullptr, &context->swapchain); result != vk::Result::eSuccess)
     {
@@ -418,26 +451,18 @@ NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
 
     context->imageViews.resize(context->amountOfFrames);
 
-    vk::ImageViewCreateInfo imageViewCreateInfo {
+    vk::ImageViewCreateInfo imageViewCreateInfo{
         .sType = vk::StructureType::eImageViewCreateInfo,
         .pNext = nullptr,
         .flags = {},
         .viewType = vk::ImageViewType::e2D,
         .format = context->swapchainFormat,
-        .components = { 
+        .components = {
             .r = vk::ComponentSwizzle::eR,
-            .g = vk::ComponentSwizzle::eG, 
+            .g = vk::ComponentSwizzle::eG,
             .b = vk::ComponentSwizzle::eB,
-            .a = vk::ComponentSwizzle::eA 
-        },
-        .subresourceRange { 
-            .aspectMask = vk::ImageAspectFlagBits::eColor, 
-            .baseMipLevel = 0, 
-            .levelCount = 1, 
-            .baseArrayLayer = 0, 
-            .layerCount = 1
-        }
-    };
+            .a = vk::ComponentSwizzle::eA},
+        .subresourceRange{.aspectMask = vk::ImageAspectFlagBits::eColor, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
 
     for (unsigned long x = 0; x < context->amountOfFrames; x++)
     {
@@ -456,7 +481,7 @@ NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
 NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
 {
 
-    vk::AttachmentDescription attachmentDescription {
+    vk::AttachmentDescription attachmentDescription{
 
         .format = context->swapchainFormat,
         .samples = vk::SampleCountFlagBits::e1,
@@ -465,28 +490,25 @@ NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
         .stencilLoadOp = vk::AttachmentLoadOp::eDontCare,
         .stencilStoreOp = vk::AttachmentStoreOp::eDontCare,
         .initialLayout = vk::ImageLayout::eUndefined,
-        .finalLayout = vk::ImageLayout::ePresentSrcKHR
-    };
+        .finalLayout = vk::ImageLayout::ePresentSrcKHR};
 
-    vk::AttachmentReference attachmentReference {
-    
+    vk::AttachmentReference attachmentReference{
+
         .attachment = 0,
-        .layout = vk::ImageLayout::eAttachmentOptimal
-    };
+        .layout = vk::ImageLayout::eAttachmentOptimal};
 
-    vk::SubpassDescription subpassDescription {
+    vk::SubpassDescription subpassDescription{
 
         .flags = {},
-        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,   
+        .pipelineBindPoint = vk::PipelineBindPoint::eGraphics,
         .inputAttachmentCount = 0,
-        .pInputAttachments = nullptr,      
+        .pInputAttachments = nullptr,
         .colorAttachmentCount = 1,
         .pColorAttachments = &attachmentReference,
-        .pResolveAttachments = nullptr,   
+        .pResolveAttachments = nullptr,
         .pDepthStencilAttachment = nullptr,
         .preserveAttachmentCount = 0,
-        .pPreserveAttachments = nullptr  
-    };
+        .pPreserveAttachments = nullptr};
     /*
         vk::SubpassDependency subpassDependency;
         subpassDependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
@@ -497,15 +519,14 @@ NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
         subpassDependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
     */
 
-    vk::RenderPassCreateInfo renderPassCreateInfo {
+    vk::RenderPassCreateInfo renderPassCreateInfo{
 
         .attachmentCount = 1,
         .pAttachments = &attachmentDescription,
         .subpassCount = 1,
         .pSubpasses = &subpassDescription,
         .dependencyCount = 0,
-        .pDependencies = nullptr
-    };
+        .pDependencies = nullptr};
 
     if (vk::Result result = context->device.createRenderPass(&renderPassCreateInfo, 0, &context->renderPass); result != vk::Result::eSuccess)
     {
@@ -523,14 +544,13 @@ NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context
 
     context->framebuffers.resize(context->amountOfFrames);
 
-    vk::FramebufferCreateInfo framebufferCreateInfo {
+    vk::FramebufferCreateInfo framebufferCreateInfo{
 
         .renderPass = context->renderPass,
         .attachmentCount = 1,
         .width = context->width,
         .height = context->height,
-        .layers = 1
-    };
+        .layers = 1};
 
     for (unsigned long x = 0; x < context->amountOfFrames; x++)
     {
@@ -552,12 +572,11 @@ NODISCARD VulkanContextResult createCommandPool(VulkanContext *context)
     if (!context->device)
         return FailedCreateCommandPool;
 
-    vk::CommandPoolCreateInfo commandPoolCreateInfo {
+    vk::CommandPoolCreateInfo commandPoolCreateInfo{
         .sType = vk::StructureType::eCommandPoolCreateInfo,
         .pNext = nullptr,
         .flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
-        .queueFamilyIndex = context->graphics.familyIndex
-    };
+        .queueFamilyIndex = context->graphics.familyIndex};
 
     if (vk::Result result = context->device.createCommandPool(&commandPoolCreateInfo, nullptr, &context->commandPool); result != vk::Result::eSuccess)
     {
@@ -572,13 +591,12 @@ NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context)
 
     context->commandBuffers.resize(context->amountOfFrames);
 
-    vk::CommandBufferAllocateInfo commandBufferAllocateInfo {
+    vk::CommandBufferAllocateInfo commandBufferAllocateInfo{
         .sType = vk::StructureType::eCommandBufferAllocateInfo,
         .pNext = nullptr,
         .commandPool = context->commandPool,
         .level = vk::CommandBufferLevel::ePrimary,
-        .commandBufferCount = 1
-    };
+        .commandBufferCount = 1};
 
     for (uint32_t x = 0; x < context->amountOfFrames; x++)
     {
@@ -597,11 +615,10 @@ NODISCARD VulkanContextResult createFence(VulkanContext *context)
 
     context->fences.resize(context->amountOfFrames);
 
-    vk::FenceCreateInfo fenceCreateInfo {
+    vk::FenceCreateInfo fenceCreateInfo{
         .sType = vk::StructureType::eFenceCreateInfo,
         .pNext = nullptr,
-        .flags = vk::FenceCreateFlagBits::eSignaled
-    };
+        .flags = vk::FenceCreateFlagBits::eSignaled};
 
     for (uint32_t x = 0; x < context->amountOfFrames; x++)
     {
@@ -621,11 +638,10 @@ NODISCARD VulkanContextResult createSemaphore(VulkanContext *context)
     context->waitSemaphore.resize(context->amountOfFrames);
     context->signalSemaphore.resize(context->amountOfFrames);
 
-    vk::SemaphoreCreateInfo semaphoreCreateInfo {
+    vk::SemaphoreCreateInfo semaphoreCreateInfo{
         .sType = vk::StructureType::eSemaphoreCreateInfo,
         .pNext = nullptr,
-        .flags = {}
-    };
+        .flags = {}};
 
     for (vk::Semaphore &semaphore : context->signalSemaphore)
     {
@@ -730,7 +746,7 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult render(VulkanContext *context)
+NODISCARD VulkanContextResult render(VulkanContext *context, vk::Buffer buffer, SVulkanPipeline pipeline)
 {
 
     uint32_t imageIndex;
@@ -754,39 +770,40 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
 
     context->commandBuffers[imageIndex].reset();
 
-    vk::CommandBufferBeginInfo commandBufferBeginInfo {
+    vk::CommandBufferBeginInfo commandBufferBeginInfo{
         .sType = vk::StructureType::eCommandBufferBeginInfo,
         .pNext = nullptr,
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
-    };
+        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
 
     vk::ClearValue clearValue;
-    clearValue.setColor(std::array<float, 4>{0.0f, 0.0f, 1.0f, 1.0f});
+    clearValue.setColor(std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f});
 
-    vk::RenderPassBeginInfo renderPassBeginInfo {
+    vk::RenderPassBeginInfo renderPassBeginInfo{
 
         .renderPass = context->renderPass,
         .framebuffer = context->framebuffers[imageIndex],
-        
+
         .renderArea = {
 
-            .offset {
+            .offset{
                 .x = 0,
-                .y = 0
-            },
+                .y = 0},
 
-            .extent {
-                .width = context->width, 
-                .height = context->height
-            }
-        },
+            .extent{
+                .width = context->width,
+                .height = context->height}},
 
         .clearValueCount = 1,
-        .pClearValues = &clearValue
-    };
+        .pClearValues = &clearValue};
 
     context->commandBuffers[imageIndex].begin(commandBufferBeginInfo);
     context->commandBuffers[imageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
+
+    vk::DeviceSize size = 0;
+    context->commandBuffers[imageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
+    //context->commandBuffers[imageIndex].bindVertexBuffers(0, 1, &buffer, &size);
+    context->commandBuffers[imageIndex].draw(3, 1, 0, 0);
+
     context->commandBuffers[imageIndex].endRenderPass();
     context->commandBuffers[imageIndex].end();
 
@@ -794,7 +811,7 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
 
     /* Command Buffer submit */
 
-    vk::SubmitInfo submitInfo {
+    vk::SubmitInfo submitInfo{
 
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &context->waitSemaphore[context->frameIndex],
@@ -802,22 +819,20 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
         .commandBufferCount = 1,
         .pCommandBuffers = &context->commandBuffers[context->frameIndex],
         .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &context->signalSemaphore[context->frameIndex]
-    };
+        .pSignalSemaphores = &context->signalSemaphore[context->frameIndex]};
 
     if (vk::Result result = context->graphics.queue.submit(1, &submitInfo, context->fences[context->frameIndex]); result != vk::Result::eSuccess)
     {
         return VulkanContextResult::FailedVulkanRendering;
     }
 
-    vk::PresentInfoKHR presentInfoKHR {
+    vk::PresentInfoKHR presentInfoKHR{
 
         .waitSemaphoreCount = 1,
         .pWaitSemaphores = &context->signalSemaphore[context->frameIndex],
         .swapchainCount = 1,
         .pSwapchains = &context->swapchain,
-        .pImageIndices = &imageIndex
-    };
+        .pImageIndices = &imageIndex};
 
     if (vk::Result result = context->graphics.queue.presentKHR(presentInfoKHR); result != vk::Result::eSuccess)
     {
@@ -831,9 +846,6 @@ NODISCARD VulkanContextResult render(VulkanContext *context)
 
 void terminateVulkan(VulkanContext *context)
 {
-
-    vkDeviceWaitIdle(context->device);
-
     vk::Instance instance = context->instance;
     vk::Device device = context->device;
 
@@ -883,20 +895,291 @@ void terminateVulkan(VulkanContext *context)
     }
 }
 
-bool handleMessage() {
+std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilter, vk::MemoryPropertyFlags properties)
+{
 
-		SDL_Event event;
-		while (SDL_PollEvent(&event)) {
-			switch (event.type) {
-		    	case SDL_EVENT_QUIT:
-			    	return false;
-			default:
-				break;
-			}
-		}
-        
-		return true;
-	}
+    vk::PhysicalDeviceMemoryProperties memoryProperties = context->physicalDevice.getMemoryProperties();
+
+    for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
+    {
+        if ((typeFilter & (1 << memoryTypeIndex)) &&
+            (memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags & properties))
+        {
+            return std::optional<uint32_t>(memoryTypeIndex);
+        }
+    }
+
+    return std::nullopt;
+}
+
+std::optional<VulkanBuffer> createBuffer(VulkanContext *context, vk::BufferUsageFlagBits usage, std::vector<float> vertices)
+{
+
+    vk::Buffer buffer;
+
+    vk::BufferCreateInfo bufferCreateInfo{
+        .sType = vk::StructureType::eBufferCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .size = sizeof(vertices[0]) * vertices.size(),
+        .usage = usage,
+        .sharingMode = vk::SharingMode::eExclusive,
+        .queueFamilyIndexCount = 0,
+        .pQueueFamilyIndices = nullptr};
+
+    if (vk::Result result = context->device.createBuffer(&bufferCreateInfo, nullptr, &buffer); result != vk::Result::eSuccess)
+    {
+        return std::nullopt;
+    }
+
+    vk::MemoryRequirements memoryRequirements;
+    context->device.getBufferMemoryRequirements(buffer, &memoryRequirements);
+
+    std::optional<uint32_t> memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    if (!memoryTypeIndex.has_value())
+    {
+        return std::nullopt;
+    }
+
+    vk::MemoryAllocateInfo memoryAllocateInfo{
+        .pNext = nullptr,
+        .allocationSize = memoryRequirements.size,
+        .memoryTypeIndex = memoryTypeIndex.value()};
+
+    vk::DeviceMemory memory;
+    if (vk::Result result = context->device.allocateMemory(&memoryAllocateInfo, nullptr, &memory); result != vk::Result::eSuccess)
+    {
+        return std::nullopt;
+    }
+
+    context->device.bindBufferMemory(buffer, memory, 0);
+
+    return std::optional<VulkanBuffer>({buffer, memory, usage});
+}
+
+enum VulkanPipelineResult
+{
+    Succes,
+    FailedReadVertexFile,
+    FailedReadFragementFile,
+    FailedVertexShaderModule,
+    FailedFragmentShaderModule,
+    FailedCreatePipelineLayout,
+    FailedCreatePipeline
+};
+
+NODISCARD static std::optional<std::vector<uint8_t>> readFile(std::string filename)
+{
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open())
+    {
+        return std::nullopt;
+    }
+
+    size_t fileSize = static_cast<size_t>(file.tellg());
+    std::vector<uint8_t> buffer(fileSize);
+
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(buffer.data()), fileSize);
+    file.close();
+
+    return buffer;
+}
+
+NODISCARD std::optional<vk::ShaderModule> createShaderModule(VulkanContext *context, std::vector<uint8_t> &code)
+{
+
+    vk::ShaderModuleCreateInfo shaderModuleCreateInfo{
+        .sType = vk::StructureType::eShaderModuleCreateInfo,
+        .pNext = nullptr,
+        .flags = {},
+        .codeSize = static_cast<uint32_t>(code.size()),
+        .pCode = reinterpret_cast<const uint32_t *>(code.data()),
+    };
+
+    vk::ShaderModule shaderModule;
+    if (vk::Result result = context->device.createShaderModule(&shaderModuleCreateInfo, nullptr, &shaderModule); result != vk::Result::eSuccess)
+    {
+        return std::nullopt;
+    }
+
+    return std::make_optional<vk::ShaderModule>(shaderModule);
+}
+
+NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline(VulkanContext *context, std::string vertexShaderFile, std::string fragmentShaderFile)
+{
+
+    SVulkanPipeline pipeline;
+
+    auto vertexShaderCode = readFile(vertexShaderFile);
+    if (!vertexShaderCode.has_value())
+    {
+        return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedReadVertexFile);
+    }
+
+    auto fragmentShaderCode = readFile(fragmentShaderFile);
+    if (!fragmentShaderCode.has_value())
+    {
+        return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedReadFragementFile);
+    }
+
+    auto vertexShaderModule = createShaderModule(context, vertexShaderCode.value());
+    if (!vertexShaderModule.has_value())
+    {
+        return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedVertexShaderModule);
+    }
+
+    auto fragmentShaderModule = createShaderModule(context, fragmentShaderCode.value());
+    if (!fragmentShaderModule.has_value())
+    {
+        return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedFragmentShaderModule);
+    }
+
+    std::array<vk::PipelineShaderStageCreateInfo, 2> shaderStages;
+
+		shaderStages[0].setStage(vk::ShaderStageFlagBits::eVertex);
+		shaderStages[0].setModule(vertexShaderModule.value());
+		shaderStages[0].setPName("main");
+
+		shaderStages[1].setStage(vk::ShaderStageFlagBits::eFragment);
+		shaderStages[1].setModule(fragmentShaderModule.value());
+		shaderStages[1].setPName("main");
+
+		std::array<vk::VertexInputAttributeDescription, 0> vertexInputAttributeDescriptions;
+		//vertexInputAttributeDescriptions[0].setBinding(0);
+        //vertexInputAttributeDescriptions[0].setLocation(0);
+        //vertexInputAttributeDescriptions[0].setFormat(vk::Format::eR32G32Sfloat);
+        //vertexInputAttributeDescriptions[0].setOffset(0);
+
+		std::array<vk::VertexInputBindingDescription, 0> vertexInputBindingDescriptions;
+		//vertexInputBindingDescriptions[0].setBinding(0);
+        //vertexInputBindingDescriptions[0].setStride(sizeof(float) * 2);
+        //vertexInputBindingDescriptions[0].setInputRate(vk::VertexInputRate::eVertex);
+
+		vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo;
+		vertexInputStateCreateInfo.setVertexAttributeDescriptions(vertexInputAttributeDescriptions);
+		vertexInputStateCreateInfo.setVertexBindingDescriptions(vertexInputBindingDescriptions);
+
+		vk::PipelineInputAssemblyStateCreateInfo inputAssemblyState;
+		inputAssemblyState.setTopology(vk::PrimitiveTopology::eTriangleList);
+
+		std::array<vk::Viewport, 1> viewports;
+		viewports[0].setWidth(static_cast<float>(context->width));
+		viewports[0].setHeight(static_cast<float>(context->height));
+
+		std::array<vk::Rect2D, 1> scissors;
+		scissors[0].extent.setWidth(context->width);
+		scissors[0].extent.setHeight(context->height);
+
+		vk::PipelineViewportStateCreateInfo viewportState;
+		viewportState.setViewports(viewports);
+		viewportState.setScissors(scissors);
+
+		vk::PipelineRasterizationStateCreateInfo rasterizationState;
+		rasterizationState.setLineWidth(1.0f);
+		rasterizationState.setFrontFace(vk::FrontFace::eCounterClockwise);
+		rasterizationState.setCullMode(vk::CullModeFlagBits::eFront);
+
+		vk::PipelineMultisampleStateCreateInfo multisampleState;
+		multisampleState.setRasterizationSamples(vk::SampleCountFlagBits::e1);
+
+		std::array<vk::PipelineColorBlendAttachmentState, 1> colorBlendAttachments;
+		colorBlendAttachments[0].setColorWriteMask(vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
+		colorBlendAttachments[0].setAlphaBlendOp(vk::BlendOp::eAdd);
+		colorBlendAttachments[0].setBlendEnable(VK_FALSE);
+
+		vk::PipelineColorBlendStateCreateInfo colorBlendState;
+		colorBlendState.setAttachments(colorBlendAttachments);
+
+		vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
+
+        pipeline.layout = context->device.createPipelineLayout(pipelineLayoutCreateInfo);
+
+		if(!pipeline.layout) {
+            return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedCreatePipelineLayout);
+        }
+
+		vk::GraphicsPipelineCreateInfo graphicsPipelineCreateInfo;
+
+		graphicsPipelineCreateInfo.setStages(shaderStages);
+		graphicsPipelineCreateInfo.setPVertexInputState(&vertexInputStateCreateInfo);
+		graphicsPipelineCreateInfo.setPInputAssemblyState(&inputAssemblyState);
+		graphicsPipelineCreateInfo.setPViewportState(&viewportState);
+		graphicsPipelineCreateInfo.setPRasterizationState(&rasterizationState);
+		graphicsPipelineCreateInfo.setPMultisampleState(&multisampleState);
+		graphicsPipelineCreateInfo.setPColorBlendState(&colorBlendState);
+		graphicsPipelineCreateInfo.setLayout(pipeline.layout);
+		graphicsPipelineCreateInfo.setRenderPass(context->renderPass);
+		graphicsPipelineCreateInfo.setSubpass(0);
+
+		if(vk::Result result = context->device.createGraphicsPipelines({}, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline.pipeline); result != vk::Result::eSuccess) {
+            return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedCreatePipeline);
+		} 
+
+    context->device.destroyShaderModule(vertexShaderModule.value(), nullptr);
+    context->device.destroyShaderModule(fragmentShaderModule.value(), nullptr);
+
+    return std::make_pair<SVulkanPipeline, VulkanPipelineResult>(std::move(pipeline), VulkanPipelineResult::Succes);
+}
+
+void destroyPipeline(VulkanContext* context, SVulkanPipeline& pipeline) {
+
+    context->device.destroyPipelineLayout(pipeline.layout, nullptr);
+    context->device.destroyPipeline(pipeline.pipeline, nullptr);
+}
+
+NODISCARD static std::string pipelineErrorToString(VulkanPipelineResult result)
+{
+
+    switch (result)
+    {
+    case FailedReadVertexFile:
+        return std::string("Error: Failed to read vertex file");
+    case FailedReadFragementFile:
+        return std::string("Error; Failed to read fragment file");
+    case FailedVertexShaderModule:
+        return std::string("Error: Failed to create vertex shader module");
+    case FailedFragmentShaderModule:
+        return std::string("Error: Failed to create fragment shader module");
+    case FailedCreatePipelineLayout:
+        return std::string("Error: Failed to create pipeline layout");
+    case FailedCreatePipeline:
+        return std::string("Error: Failed to create pipeline");
+    }
+
+    return std::string();
+}
+
+void destroyBuffer(VulkanContext *context, std::optional<VulkanBuffer> buffer)
+{
+
+    if (!buffer.has_value())
+    {
+        return;
+    }
+
+    context->device.destroyBuffer(buffer.value().buffer);
+    context->device.freeMemory(buffer.value().memory);
+}
+
+bool handleMessage()
+{
+
+    SDL_Event event;
+    while (SDL_PollEvent(&event))
+    {
+        switch (event.type)
+        {
+        case SDL_EVENT_QUIT:
+            return false;
+        default:
+            break;
+        }
+    }
+
+    return true;
+}
 
 int main()
 {
@@ -906,8 +1189,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    SDL_Window* window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
-
+    SDL_Window *window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
 
     VulkanContext context;
     if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
@@ -917,11 +1199,32 @@ int main()
         return EXIT_FAILURE;
     }
 
+    const std::vector<float> vertices {
+        0.5f, -0.5f,
+        0.5f, 0.5f,
+        -0.5f, 0.5f
+    };
+
+    std::optional<VulkanBuffer> buffer;
+    if (buffer = createBuffer(&context, vk::BufferUsageFlagBits::eVertexBuffer, vertices); !buffer.has_value())
+    {
+        return EXIT_FAILURE;
+    }
+
+    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "shader/VertexShader.spv", "FragmentShader.spv");
+    if (pipeline.second != VulkanPipelineResult::Succes) {
+        std::cout << pipelineErrorToString(pipeline.second) << std::endl;
+        destroyBuffer(&context, buffer);
+        terminateVulkan(&context);
+        return EXIT_FAILURE;
+    }
+
     SDL_ShowWindow(window);
 
-    while (handleMessage()) {
+    while (handleMessage())
+    {
 
-        if (render(&context) != VulkanContextResult::Success)
+        if (render(&context, buffer.value().buffer, pipeline.first) != VulkanContextResult::Success)
         {
             terminateVulkan(&context);
             return EXIT_FAILURE;
@@ -929,6 +1232,12 @@ int main()
     }
 
     SDL_HideWindow(window);
+    
+    vkDeviceWaitIdle(context.device);
+
+    destroyPipeline(&context, pipeline.first);
+
+    destroyBuffer(&context, buffer);
 
     terminateVulkan(&context);
 
