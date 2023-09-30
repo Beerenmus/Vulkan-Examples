@@ -799,9 +799,11 @@ NODISCARD VulkanContextResult render(VulkanContext *context, vk::Buffer buffer, 
     context->commandBuffers[imageIndex].begin(commandBufferBeginInfo);
     context->commandBuffers[imageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
 
-    vk::DeviceSize size = 0;
     context->commandBuffers[imageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-    //context->commandBuffers[imageIndex].bindVertexBuffers(0, 1, &buffer, &size);
+    
+    vk::DeviceSize size = 0;
+    context->commandBuffers[imageIndex].bindVertexBuffers(0, 1, &buffer, &size);
+    
     context->commandBuffers[imageIndex].draw(3, 1, 0, 0);
 
     context->commandBuffers[imageIndex].endRenderPass();
@@ -954,6 +956,10 @@ std::optional<VulkanBuffer> createBuffer(VulkanContext *context, vk::BufferUsage
 
     context->device.bindBufferMemory(buffer, memory, 0);
 
+    void* map = context->device.mapMemory(memory, 0, bufferCreateInfo.size);
+    memcpy(map, vertices.data(), static_cast<size_t>(bufferCreateInfo.size));
+    context->device.unmapMemory(memory);
+
     return std::optional<VulkanBuffer>({buffer, memory, usage});
 }
 
@@ -1046,16 +1052,21 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 		shaderStages[1].setModule(fragmentShaderModule.value());
 		shaderStages[1].setPName("main");
 
-		std::array<vk::VertexInputAttributeDescription, 0> vertexInputAttributeDescriptions;
-		//vertexInputAttributeDescriptions[0].setBinding(0);
-        //vertexInputAttributeDescriptions[0].setLocation(0);
-        //vertexInputAttributeDescriptions[0].setFormat(vk::Format::eR32G32Sfloat);
-        //vertexInputAttributeDescriptions[0].setOffset(0);
+		std::array<vk::VertexInputAttributeDescription, 2> vertexInputAttributeDescriptions;
+		vertexInputAttributeDescriptions[0].setBinding(0);
+        vertexInputAttributeDescriptions[0].setLocation(0);
+        vertexInputAttributeDescriptions[0].setFormat(vk::Format::eR32G32Sfloat);
+        vertexInputAttributeDescriptions[0].setOffset(0);
 
-		std::array<vk::VertexInputBindingDescription, 0> vertexInputBindingDescriptions;
-		//vertexInputBindingDescriptions[0].setBinding(0);
-        //vertexInputBindingDescriptions[0].setStride(sizeof(float) * 2);
-        //vertexInputBindingDescriptions[0].setInputRate(vk::VertexInputRate::eVertex);
+		vertexInputAttributeDescriptions[1].setBinding(0);
+        vertexInputAttributeDescriptions[1].setLocation(1);
+        vertexInputAttributeDescriptions[1].setFormat(vk::Format::eR32G32B32Sfloat);
+        vertexInputAttributeDescriptions[1].setOffset(sizeof(float) * 2);
+
+		std::array<vk::VertexInputBindingDescription, 1> vertexInputBindingDescriptions;
+		vertexInputBindingDescriptions[0].setBinding(0);
+        vertexInputBindingDescriptions[0].setStride(sizeof(float) * 5);
+        vertexInputBindingDescriptions[0].setInputRate(vk::VertexInputRate::eVertex);
 
 		vk::PipelineVertexInputStateCreateInfo vertexInputStateCreateInfo;
 		vertexInputStateCreateInfo.setVertexAttributeDescriptions(vertexInputAttributeDescriptions);
@@ -1200,9 +1211,9 @@ int main()
     }
 
     const std::vector<float> vertices {
-        0.5f, -0.5f,
-        0.5f, 0.5f,
-        -0.5f, 0.5f
+        0.0, -0.5, 1.0, 0.0, 0.0,
+        0.5, 0.5, 0.0, 1.0, 0.0,
+        -0.5, 0.5, 0.0, 0.0, 1.0
     };
 
     std::optional<VulkanBuffer> buffer;
@@ -1211,7 +1222,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "shader/VertexShader.spv", "FragmentShader.spv");
+    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "shader/VertexShader.spv", "shader/FragmentShader.spv");
     if (pipeline.second != VulkanPipelineResult::Succes) {
         std::cout << pipelineErrorToString(pipeline.second) << std::endl;
         destroyBuffer(&context, buffer);
