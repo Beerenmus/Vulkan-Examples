@@ -1222,7 +1222,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "shader/VertexShader.spv", "shader/FragmentShader.spv");
+    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "../shader/VertexShader.spv", "../shader/FragmentShader.spv");
     if (pipeline.second != VulkanPipelineResult::Succes) {
         std::cout << pipelineErrorToString(pipeline.second) << std::endl;
         destroyBuffer(&context, buffer);
