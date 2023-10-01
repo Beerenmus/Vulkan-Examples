@@ -1,14 +1,13 @@
 #define GLFW_INCLUDE_VULKAN
 #define VULKAN_HPP_NO_STRUCT_CONSTRUCTORS
 
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_vulkan.h>
-
 #include <vulkan/vulkan.hpp>
 #include <iostream>
 #include <vector>
 #include <optional>
 #include <fstream>
+
+#include "Window.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -190,34 +189,9 @@ NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, Insta
     return VulkanContextResult::Success;
 }
 
-NODISCARD InstanceExtensionList getRequiredInstanceExtensions()
+NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, Window *window)
 {
-
-    uint32_t count;
-    SDL_Vulkan_GetInstanceExtensions(&count, nullptr);
-    std::vector<const char *> extensions(count);
-    SDL_Vulkan_GetInstanceExtensions(&count, extensions.data());
-
-    return extensions;
-}
-
-NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, SDL_Window *window)
-{
-
-    assert(context->instance);
-    assert(window);
-
-    VkSurfaceKHR surface;
-    if (SDL_Vulkan_CreateSurface(window, context->instance, &surface) != SDL_TRUE)
-    {
-        return VulkanContextResult::FailedCreateSurface;
-    }
-
-    context->surface = vk::SurfaceKHR(surface);
-    if (!context->surface)
-    {
-        return VulkanContextResult::FailedCreateSurface;
-    }
+    context->surface = window->createVulkanSurface(context->instance);
 
     return VulkanContextResult::Success;
 }
@@ -670,14 +644,14 @@ NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext *context)
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *context)
+NODISCARD VulkanContextResult initVulkan(Window *window, VulkanContext *context)
 {
 
     InstanceExtensionList extensions;
+    extensions.push_back("VK_KHR_surface");
+    extensions.push_back("VK_KHR_xcb_surface");
+    
     DeviceExtensionList deviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
-
-    InstanceExtensionList requiredExtensions = getRequiredInstanceExtensions();
-    extensions.insert(extensions.end(), requiredExtensions.begin(), requiredExtensions.end());
 
     if (createVulkanInstance(context, extensions) == VulkanContextResult::FailedCreateInstance)
     {
@@ -1174,36 +1148,14 @@ void destroyBuffer(VulkanContext *context, std::optional<VulkanBuffer> buffer)
     context->device.freeMemory(buffer.value().memory);
 }
 
-bool handleMessage()
-{
-
-    SDL_Event event;
-    while (SDL_PollEvent(&event))
-    {
-        switch (event.type)
-        {
-        case SDL_EVENT_QUIT:
-            return false;
-        default:
-            break;
-        }
-    }
-
-    return true;
-}
-
 int main()
 {
+    Window window;
 
-    if (SDL_Init(SDL_INIT_VIDEO))
-    {
-        return EXIT_FAILURE;
-    }
-
-    SDL_Window *window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
+    window.create();
 
     VulkanContext context;
-    if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
+    if (VulkanContextResult result = initVulkan(&window, &context); result != VulkanContextResult::Success)
     {
         terminateVulkan(&context);
         std::cout << vulkanErrorToString(result) << std::endl;
@@ -1230,9 +1182,9 @@ int main()
         return EXIT_FAILURE;
     }
 
-    SDL_ShowWindow(window);
+    window.show();
 
-    while (handleMessage())
+    while (window.advanceToNextFrame())
     {
 
         if (render(&context, buffer.value().buffer, pipeline.first) != VulkanContextResult::Success)
@@ -1240,9 +1192,11 @@ int main()
             terminateVulkan(&context);
             return EXIT_FAILURE;
         }
+
+        window.pollEvent();
     }
 
-    SDL_HideWindow(window);
+    window.hide();
     
     vkDeviceWaitIdle(context.device);
 
@@ -1252,7 +1206,7 @@ int main()
 
     terminateVulkan(&context);
 
-    SDL_Quit();
+    window.destroy();
 
     return EXIT_SUCCESS;
 }
