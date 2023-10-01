@@ -9,6 +9,7 @@
 #include <vector>
 #include <optional>
 #include <fstream>
+#include "Window.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -1200,7 +1201,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    SDL_Window *window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
+    Window window = Window("Hello Vulkan", 1280, 720);
 
     VulkanContext context;
     if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
@@ -1230,7 +1231,7 @@ int main()
         return EXIT_FAILURE;
     }
 
-    SDL_ShowWindow(window);
+    window.show();
 
     while (handleMessage())
     {
@@ -1242,7 +1243,7 @@ int main()
         }
     }
 
-    SDL_HideWindow(window);
+    window.hide();
     
     vkDeviceWaitIdle(context.device);
 

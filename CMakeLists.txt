@@ -11,7 +11,9 @@ add_subdirectory(external/SDL)
 find_package(Vulkan REQUIRED)
 
 add_executable(engine 
-    main.cpp
+    main.cpp 
+    Window.hpp 
+    Window.cpp
 )
 
 target_include_directories(engine PUBLIC libs/SDL/include)
