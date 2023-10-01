@@ -80,6 +80,8 @@ void Window::create() {
     values[1] = XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_STRUCTURE_NOTIFY | XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_KEY_PRESS;
     xcb_create_window(m_connection, m_screen->root_depth, m_windowID, m_screen->root, 10, 10, 1200, 720, 1, XCB_WINDOW_CLASS_INPUT_OUTPUT, m_screen->root_visual, mask, values);
 
+    xcb_map_window(m_connection, m_windowID);
+    xcb_flush(m_connection);
 
     deleteAtom = requestAtom(m_connection, "WM_DELETE_WINDOW");
     xcb_atom_t protocolAtom = requestAtom(m_connection, "WM_PROTOCOLS");
@@ -97,7 +99,6 @@ void Window::create() {
 
     map = captureKeyboard(m_connection, m_setup);
 
-    xcb_flush(m_connection);
 
 }
 
@@ -152,7 +153,7 @@ Events events;
 
 void Window::pollEvent() {
 
-    xcb_generic_event_t* generic_event;
+    xcb_generic_event_t* generic_event = nullptr;
 
     int expose_count = 0;
 
@@ -165,7 +166,7 @@ void Window::pollEvent() {
                 xcb_configure_notify_event_t* event = reinterpret_cast<xcb_configure_notify_event_t*>(event);
 
                 if(event) {
-                    std::cout << "Width: " << event->width << " Height: " << event->height << std::endl;
+                    //std::cout << "Width: " << event->width << " Height: " << event->height << std::endl;
                 }
 
                 break;
@@ -221,6 +222,8 @@ void Window::pollEvent() {
 }
 
 void Window::destroy() {
+
+    xcb_flush(m_connection);
 
     Visitor visitor;
     for(auto& event : events) {
