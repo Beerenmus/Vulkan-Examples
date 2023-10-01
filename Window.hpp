@@ -1,35 +1,41 @@
 #pragma once
 
-#include <SDL3/SDL.h>
-#include <string>
-#include <vector>
+#include <xcb/xcb.h>
+#include <iostream>
 
-class WindowEvent {
+#include <vulkan/vulkan.hpp>
+#include <vulkan/vulkan_xcb.h>
 
-};
+#include "Keys.hpp"
 
-using Events = std::vector<WindowEvent>;
-
-class Window {
+class Window final {
 
     private:
-        SDL_Window* m_pWindow;
+        xcb_connection_t* m_connection;
+        const xcb_setup_t* m_setup;
+        const xcb_screen_t* m_screen;
+        xcb_window_t m_windowID;
+        xcb_screen_iterator_t m_screenIterator;
+
+        KeycodeMap map;
+
+    private:
+        bool finished = false;
+        
+    private:
+        xcb_atom_t deleteAtom;
+
+    private:
+        xcb_atom_t requestAtom(xcb_connection_t* connection, std::string name);
 
     public:
-        Window();
-        Window(std::string_view title, uint32_t width, uint32_t height);
-        Window(const Window& other) = delete;
-        Window(Window&& other);
-        ~Window();
-
-    public:
-        Window& operator = (const Window& rhs) = delete;
-        Window& operator = (Window&& rhs);
-
-        operator SDL_Window*();
-
+        void create();
         void show();
         void hide();
+        bool advanceToNextFrame();
+        void pollEvent();
+        void destroy();
 
-        bool pollEvent(Events& events);
+    public:
+        vk::SurfaceKHR createVulkanSurface(vk::Instance instance);
 };

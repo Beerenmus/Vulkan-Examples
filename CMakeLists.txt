@@ -11,12 +11,15 @@ add_subdirectory(external/SDL)
 find_package(Vulkan REQUIRED)
 
 add_executable(engine 
-    main.cpp 
-    Window.hpp 
+    main.cpp
     Window.cpp
+    Window.hpp
+    Keys.cpp
+    Keys.hpp
 )
 
 target_include_directories(engine PUBLIC libs/SDL/include)
 target_link_libraries(engine PUBLIC SDL3::SDL3)
 target_include_directories(engine PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PUBLIC ${Vulkan_LIBRARIES})
+target_link_libraries(engine PUBLIC xcb)
