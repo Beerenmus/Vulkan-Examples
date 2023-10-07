@@ -3,8 +3,11 @@
 #include <vector>
 #include <optional>
 #include <fstream>
+#include <string.h>
+#include <array>
 
-#include "Window.hpp"
+#include<SDL.h>
+#include<SDL_vulkan.h>
 
 #define NODISCARD [[nodiscard]]
 
@@ -188,9 +191,11 @@ NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, Insta
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, Window *window)
+NODISCARD VulkanContextResult createVulkanSurface(VulkanContext *context, SDL_Window *window)
 {
-    context->surface = window->createVulkanSurface(context->instance);
+    if(SDL_Vulkan_CreateSurface(window, context->instance, &context->surface) != SDL_TRUE) {
+        return VulkanContextResult::FailedCreateSurface;
+    }
 
     return VulkanContextResult::Success;
 }
@@ -670,13 +675,15 @@ NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext *context)
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult initVulkan(Window *window, VulkanContext *context)
+NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *context)
 {
 
-    InstanceExtensionList extensions;
-    extensions.push_back("VK_KHR_surface");
-    extensions.push_back("VK_KHR_xcb_surface");
     
+    uint32_t count;
+    SDL_Vulkan_GetInstanceExtensions(&count, nullptr);
+    InstanceExtensionList extensions(count);
+    SDL_Vulkan_GetInstanceExtensions(&count, extensions.data());
+
     DeviceExtensionList deviceExtensions{VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 
     if (createVulkanInstance(context, extensions) == VulkanContextResult::FailedCreateInstance)
@@ -1260,14 +1267,32 @@ void destroyBuffer(VulkanContext *context, std::optional<VulkanBuffer> buffer)
     vkFreeMemory(context->device, buffer.value().memory, nullptr);
 }
 
+bool handleMessage() {
+
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {
+			switch (event.type) {
+		    	case SDL_EVENT_QUIT:
+			    	return false;
+			default:
+				break;
+			}
+		}
+        
+		return true;
+	}
+
 int main()
 {
-    Window window;
+    if (SDL_Init(SDL_INIT_VIDEO))
+    {
+        return EXIT_FAILURE;
+    }
 
-    window.create();
+    SDL_Window* window = SDL_CreateWindow("Hello Vulkan", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_HIDDEN);
 
     VulkanContext context;
-    if (VulkanContextResult result = initVulkan(&window, &context); result != VulkanContextResult::Success)
+    if (VulkanContextResult result = initVulkan(window, &context); result != VulkanContextResult::Success)
     {
         terminateVulkan(&context);
         std::cout << vulkanErrorToString(result) << std::endl;
@@ -1294,20 +1319,15 @@ int main()
         return EXIT_FAILURE;
     }
     
+    SDL_ShowWindow(window);
 
-    window.show();
     bool running = true;
-    while (running) {
-        window.pollEvent();
-        running = window.advanceToNextFrame();
-        if (!running) {
-            break;
-        }
-
+    while (handleMessage()) {
+    
         render(&context, buffer.value().buffer, pipeline.first.pipeline);
     }
 
-    window.hide();
+    SDL_HideWindow(window);
     vkDeviceWaitIdle(context.device);
     
     destroyPipeline(&context, pipeline.first);
@@ -1315,8 +1335,6 @@ int main()
     destroyBuffer(&context, buffer);
 
     terminateVulkan(&context);
-
-    window.destroy();
 
     return EXIT_SUCCESS;
 }

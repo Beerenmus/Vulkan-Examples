@@ -12,10 +12,6 @@ find_package(Vulkan REQUIRED)
 
 add_executable(engine 
     main.cpp
-    Window.cpp
-    Window.hpp
-    Keys.cpp
-    Keys.hpp
 )
 
 target_include_directories(engine PUBLIC libs/SDL/include)
