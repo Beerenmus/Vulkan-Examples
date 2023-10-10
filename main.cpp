@@ -9,6 +9,8 @@
 #include<SDL.h>
 #include<SDL_vulkan.h>
 
+#include "Matrix.hpp"
+
 #define NODISCARD [[nodiscard]]
 
 using PhysicalDeviceList = std::vector<VkPhysicalDevice>;
@@ -81,6 +83,9 @@ using VulkanCommandBufferList = std::vector<VkCommandBuffer>;
 using VulkanFenceList = std::vector<VkFence>;
 using VulkanSemaphoreList = std::vector<VkSemaphore>;
 using VulkanCommandPoolList = std::vector<VkCommandPool>;
+using VulkanDescriptorSetLayoutBindingList = std::vector<VkDescriptorSetLayoutBinding>;
+using DescriptorPoolSizeList = std::vector<VkDescriptorPoolSize>;
+using DescriptorSetList = std::vector<VkDescriptorSet>;
 
 struct VulkanContext
 {
@@ -753,100 +758,8 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult render(VulkanContext *context, VkBuffer buffer, VkPipeline pipeline)
+VulkanContextResult render(VulkanContext *context, VkBuffer buffer, SVulkanPipeline& pipeline, std::vector<std::optional<VkDescriptorSet>>& descriptorSet)
 {
-    /*
-    uint32_t imageIndex;
-
-    if (vk::Result result = context->device.waitForFences(1, &context->fences[context->frameIndex], VK_TRUE, UINT64_MAX); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    if (vk::Result result = context->device.resetFences(1, &context->fences[context->frameIndex]); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    if (vk::Result result = context->device.acquireNextImageKHR(context->swapchain, UINT64_MAX, context->waitSemaphore[context->frameIndex], {}, &imageIndex); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    context->commandBuffers[imageIndex].reset();
-
-    vk::CommandBufferBeginInfo commandBufferBeginInfo{
-        .sType = vk::StructureType::eCommandBufferBeginInfo,
-        .pNext = nullptr,
-        .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit};
-
-    vk::ClearValue clearValue;
-    clearValue.setColor(std::array<float, 4>{0.1f, 0.1f, 0.1f, 1.0f});
-
-    vk::RenderPassBeginInfo renderPassBeginInfo{
-
-        .renderPass = context->renderPass,
-        .framebuffer = context->framebuffers[imageIndex],
-
-        .renderArea = {
-
-            .offset{
-                .x = 0,
-                .y = 0},
-
-            .extent{
-                .width = context->width,
-                .height = context->height}},
-
-        .clearValueCount = 1,
-        .pClearValues = &clearValue};
-
-    context->commandBuffers[imageIndex].begin(commandBufferBeginInfo);
-    context->commandBuffers[imageIndex].beginRenderPass(renderPassBeginInfo, vk::SubpassContents::eInline);
-
-    context->commandBuffers[imageIndex].bindPipeline(vk::PipelineBindPoint::eGraphics, pipeline.pipeline);
-    
-    vk::DeviceSize size = 0;
-    context->commandBuffers[imageIndex].bindVertexBuffers(0, 1, &buffer, &size);
-    
-    context->commandBuffers[imageIndex].draw(3, 1, 0, 0);
-
-    context->commandBuffers[imageIndex].endRenderPass();
-    context->commandBuffers[imageIndex].end();
-
-    vk::PipelineStageFlags pipelineStage = vk::PipelineStageFlagBits::eColorAttachmentOutput;
-
-    vk::SubmitInfo submitInfo{
-
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &context->waitSemaphore[context->frameIndex],
-        .pWaitDstStageMask = &pipelineStage,
-        .commandBufferCount = 1,
-        .pCommandBuffers = &context->commandBuffers[context->frameIndex],
-        .signalSemaphoreCount = 1,
-        .pSignalSemaphores = &context->signalSemaphore[context->frameIndex]};
-
-    if (vk::Result result = context->graphics.queue.submit(1, &submitInfo, context->fences[context->frameIndex]); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    vk::PresentInfoKHR presentInfoKHR{
-
-        .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &context->signalSemaphore[context->frameIndex],
-        .swapchainCount = 1,
-        .pSwapchains = &context->swapchain,
-        .pImageIndices = &imageIndex};
-
-    if (vk::Result result = context->graphics.queue.presentKHR(presentInfoKHR); result != vk::Result::eSuccess)
-    {
-        return VulkanContextResult::FailedVulkanRendering;
-    }
-
-    context->frameIndex = (context->frameIndex + 1) % context->amountOfFrames;
-    */
-
         uint32_t frameIndex = context->frameIndex;
         VkCommandPool commandPool = context->commandPools[frameIndex];
         VkFence fence = context->fences[frameIndex];
@@ -880,7 +793,8 @@ VulkanContextResult render(VulkanContext *context, VkBuffer buffer, VkPipeline p
         vkCmdBeginRenderPass(context->commandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
         VkDeviceSize size = 0;
-        vkCmdBindPipeline(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+        vkCmdBindPipeline(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
+        vkCmdBindDescriptorSets(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &descriptorSet[frameIndex].value(), 0, nullptr);
         vkCmdBindVertexBuffers(context->commandBuffers[frameIndex], 0, 1, &buffer, &size);
         vkCmdDraw(context->commandBuffers[frameIndex], 3, 1, 0, 0);
 
@@ -1088,7 +1002,92 @@ NODISCARD std::optional<VkShaderModule> createShaderModule(VulkanContext *contex
     return std::make_optional<VkShaderModule>(shaderModule);
 }
 
-NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline(VulkanContext *context, std::string vertexShaderFile, std::string fragmentShaderFile)
+NODISCARD std::optional<VkDescriptorPool> createDescriptorPool(VulkanContext* context, DescriptorPoolSizeList poolSize, uint32_t maxSets = 1000) {
+
+    VkDescriptorPool descriptorPool;
+
+    VkDescriptorPoolCreateInfo descriptorPoolCreateInfo;
+    descriptorPoolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    descriptorPoolCreateInfo.pNext = nullptr;
+    descriptorPoolCreateInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+    descriptorPoolCreateInfo.maxSets = maxSets;
+    descriptorPoolCreateInfo.poolSizeCount = static_cast<uint32_t>(poolSize.size());
+    descriptorPoolCreateInfo.pPoolSizes = poolSize.data();
+
+    if(VkResult result = vkCreateDescriptorPool(context->device, &descriptorPoolCreateInfo, nullptr, &descriptorPool); result != VK_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return descriptorPool;
+}
+
+NODISCARD std::optional<VkDescriptorSet> createDescriptor(VulkanContext* context, VkDescriptorPool descriptorPool, VkDescriptorSetLayout layout) {
+
+    VkDescriptorSet descriptorSet;
+
+    VkDescriptorSetAllocateInfo descriptorSetAllocateInfo;
+    descriptorSetAllocateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    descriptorSetAllocateInfo.pNext = nullptr;
+    descriptorSetAllocateInfo.descriptorPool = descriptorPool;
+    descriptorSetAllocateInfo.descriptorSetCount = 1;
+    descriptorSetAllocateInfo.pSetLayouts = &layout;
+
+    if(VkResult result = vkAllocateDescriptorSets(context->device, &descriptorSetAllocateInfo, &descriptorSet); result != VK_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return descriptorSet;
+}
+
+NODISCARD std::optional<VkDescriptorSetLayout> createDescriptorSetLayout(VulkanContext* context, VulkanDescriptorSetLayoutBindingList bindings) {
+
+    VkDescriptorSetLayout descriptorSetLayout;
+
+    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo;
+    descriptorSetLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    descriptorSetLayoutCreateInfo.pNext = nullptr;
+    descriptorSetLayoutCreateInfo.flags = 0;
+    descriptorSetLayoutCreateInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    descriptorSetLayoutCreateInfo.pBindings = bindings.data();
+
+    if(VkResult result = vkCreateDescriptorSetLayout(context->device, &descriptorSetLayoutCreateInfo, nullptr, &descriptorSetLayout); result != VK_SUCCESS) {
+        return std::nullopt;
+    }
+
+    return descriptorSetLayout;
+}
+
+void updateDescriptorBuffer(VulkanContext* context, VkBuffer buffer, VkDeviceSize range, VkDescriptorSet descriptorSet, uint32_t binding, VkDescriptorType descriptorType) {
+
+    VkDescriptorBufferInfo descriptorBufferInfo;
+    descriptorBufferInfo.buffer = buffer;
+    descriptorBufferInfo.offset = 0;
+    descriptorBufferInfo.range = range;
+
+    VkWriteDescriptorSet writeDescriptorSet;
+    writeDescriptorSet.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writeDescriptorSet.pNext = nullptr;
+    writeDescriptorSet.dstSet = descriptorSet;
+    writeDescriptorSet.dstBinding = binding;
+    writeDescriptorSet.dstArrayElement = 0;
+    writeDescriptorSet.descriptorCount = 1;
+    writeDescriptorSet.descriptorType = descriptorType;
+    writeDescriptorSet.pImageInfo = nullptr;
+    writeDescriptorSet.pBufferInfo = &descriptorBufferInfo;
+    writeDescriptorSet.pTexelBufferView = nullptr;
+
+    vkUpdateDescriptorSets(context->device, 1, &writeDescriptorSet, 0, nullptr);
+}
+
+void updateUniformBuffer(VulkanContext* context, VkDeviceMemory memory, VkDeviceSize size, std::vector<float> vertices) {
+
+    void* map;
+    vkMapMemory(context->device, memory, 0, size, 0, &map);
+    memcpy(map, vertices.data(), size);
+    vkUnmapMemory(context->device, memory);
+}
+
+NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline(VulkanContext *context, std::string vertexShaderFile, std::string fragmentShaderFile, std::vector<VkDescriptorSetLayout> descriptorSetLayout = {})
 {
 
     SVulkanPipeline pipeline;
@@ -1198,6 +1197,8 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 
 	VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo {};
     pipelineLayoutCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayout.size());
+    pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayout.data();
 
     if(VkResult result = vkCreatePipelineLayout(context->device, &pipelineLayoutCreateInfo, nullptr, &pipeline.layout); result != VK_SUCCESS) {
         return std::make_pair<SVulkanPipeline, VulkanPipelineResult>({}, VulkanPipelineResult::FailedCreatePipelineLayout);
@@ -1306,31 +1307,84 @@ int main()
     };
 
     std::optional<VulkanBuffer> buffer;
-    if (buffer = createBuffer(&context, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices); !buffer.has_value())
-    {
+    if (buffer = createBuffer(&context, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices); !buffer.has_value()) {
         return EXIT_FAILURE;
     }
 
-    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "../shader/VertexShader.spv", "../shader/FragmentShader.spv");
+    std::vector<Matrix> matrix(context.amountOfFrames);
+
+    std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
+    for(uint32_t x=0;x<matrixBuffer.size();x++) {
+        if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, matrix[x]); !matrixBuffer[x].has_value()) {
+            return EXIT_FAILURE;
+        }
+    }
+
+    std::optional<VkDescriptorPool> descriptorPool;
+    DescriptorPoolSizeList descriptorPoolList {
+        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 100 }
+    };
+
+    if(descriptorPool = createDescriptorPool(&context, descriptorPoolList); !descriptorPool.has_value()) {
+        return EXIT_FAILURE;
+    }
+
+    std::optional<VkDescriptorSetLayout> descriptorSetLayout;
+    VulkanDescriptorSetLayoutBindingList descriptorSetLayoutBindingList {
+        { 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1, VK_SHADER_STAGE_VERTEX_BIT, nullptr }
+    };
+
+    if(descriptorSetLayout = createDescriptorSetLayout(&context, descriptorSetLayoutBindingList); !descriptorSetLayout.has_value()) {
+        return EXIT_FAILURE;
+    }
+
+    std::vector<std::optional<VkDescriptorSet>> descriptorSetList(context.amountOfFrames);
+    for(uint32_t x=0;x<context.amountOfFrames;x++) {
+        descriptorSetList[x] = createDescriptor(&context, descriptorPool.value(), descriptorSetLayout.value());
+    }
+
+    for(uint32_t x=0;x<context.amountOfFrames;x++) {
+        updateDescriptorBuffer(&context, matrixBuffer[x].value().buffer, sizeof(Matrix), descriptorSetList[x].value(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+    }
+
+    std::vector<VkDescriptorSetLayout> layouts { descriptorSetLayout.value() };
+    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "../shader/VertexShader.spv", "../shader/FragmentShader.spv", layouts);
     if (pipeline.second != VulkanPipelineResult::Succes) {
         std::cout << pipelineErrorToString(pipeline.second) << std::endl;
         destroyBuffer(&context, buffer);
         terminateVulkan(&context);
         return EXIT_FAILURE;
     }
-    
+
     SDL_ShowWindow(window);
 
     bool running = true;
     while (handleMessage()) {
     
-        render(&context, buffer.value().buffer, pipeline.first.pipeline);
+        for(uint32_t x=0;x<context.amountOfFrames;x++) {
+            matrix[x].rotate_z(0.001);
+            updateUniformBuffer(&context, matrixBuffer[x].value().memory, sizeof(Matrix), matrix[x]);
+        }
+
+        render(&context, buffer.value().buffer, pipeline.first, descriptorSetList);
     }
 
     SDL_HideWindow(window);
     vkDeviceWaitIdle(context.device);
-    
+
     destroyPipeline(&context, pipeline.first);
+
+    for(uint32_t x=0;x<descriptorSetList.size(); x++) {
+        vkFreeDescriptorSets(context.device, descriptorPool.value(), 1, &descriptorSetList[x].value());
+    }
+
+    vkDestroyDescriptorSetLayout(context.device, descriptorSetLayout.value(), nullptr);
+
+    vkDestroyDescriptorPool(context.device, descriptorPool.value(), nullptr);
+
+    for(uint32_t x=0;x<matrixBuffer.size();x++) {
+        destroyBuffer(&context, matrixBuffer[x]);
+    }
 
     destroyBuffer(&context, buffer);
 
