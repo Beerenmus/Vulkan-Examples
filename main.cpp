@@ -47,6 +47,10 @@ struct VulkanBuffer
     VkBufferUsageFlagBits usage;
 };
 
+struct UniformBuffer {
+    std::array<float, 16> modelMatrix;
+};
+
 class SVulkanPipeline {
     
     public:
