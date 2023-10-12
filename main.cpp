@@ -1228,6 +1228,35 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
     return std::make_pair<SVulkanPipeline, VulkanPipelineResult>(std::move(pipeline), VulkanPipelineResult::Succes);
 }
 
+std::array<float, 16> createPerspectiveMatrix(float fov, float aspectRatio, float nearPlane, float farPlane)
+{
+    std::array<float, 16> matrix;
+    const float tanHalfFov = tan(fov / 2.0f);
+    const float depth = farPlane - nearPlane;
+
+    matrix[0] = 1.0f / (aspectRatio * tanHalfFov);
+    matrix[1] = 0.0f;
+    matrix[2] = 0.0f;
+    matrix[3] = 0.0f;
+
+    matrix[4] = 0.0f;
+    matrix[5] = 1.0f / tanHalfFov;
+    matrix[6] = 0.0f;
+    matrix[7] = 0.0f;
+
+    matrix[8] = 0.0f;
+    matrix[9] = 0.0f;
+    matrix[10] = -(farPlane + nearPlane) / depth;
+    matrix[11] = -(2.0f * farPlane * nearPlane) / depth;
+
+    matrix[12] = 0.0f;
+    matrix[13] = 0.0f;
+    matrix[14] = -1.0f;
+    matrix[15] = 0.0f;
+
+    return matrix;
+}
+
 void destroyPipeline(VulkanContext* context, SVulkanPipeline& pipeline) {
 
     vkDestroyPipelineLayout(context->device, pipeline.layout, nullptr);
