@@ -48,7 +48,7 @@ struct VulkanBuffer
 };
 
 struct UniformBuffer {
-    std::array<float, 16> modelMatrix;
+    Matrix modelMatrix;
 };
 
 class SVulkanPipeline {
@@ -905,7 +905,8 @@ std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilt
     return std::nullopt;
 }
 
-std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlagBits usage, std::vector<float> vertices)
+template<typename T>
+std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlagBits usage, VkDeviceSize size, const T* vertices)
 {
 
     VkBuffer buffer;
@@ -914,7 +915,7 @@ std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFl
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .pNext = nullptr,
         .flags = {},
-        .size = sizeof(vertices[0]) * vertices.size(),
+        .size = size,
         .usage = usage,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .queueFamilyIndexCount = 0,
@@ -950,7 +951,7 @@ std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFl
 
     void* map;
     vkMapMemory(context->device, memory, 0, bufferCreateInfo.size, 0, &map);
-    memcpy(map, vertices.data(), static_cast<size_t>(bufferCreateInfo.size));
+    memcpy(map, vertices, static_cast<size_t>(bufferCreateInfo.size));
     vkUnmapMemory(context->device, memory);
 
     return std::optional<VulkanBuffer>({buffer, memory, usage});
@@ -1083,11 +1084,12 @@ void updateDescriptorBuffer(VulkanContext* context, VkBuffer buffer, VkDeviceSiz
     vkUpdateDescriptorSets(context->device, 1, &writeDescriptorSet, 0, nullptr);
 }
 
-void updateUniformBuffer(VulkanContext* context, VkDeviceMemory memory, VkDeviceSize size, std::vector<float> vertices) {
+template<typename T>
+void updateUniformBuffer(VulkanContext* context, VkDeviceMemory memory, VkDeviceSize size, const T* data) {
 
     void* map;
     vkMapMemory(context->device, memory, 0, size, 0, &map);
-    memcpy(map, vertices.data(), size);
+    memcpy(map, data, size);
     vkUnmapMemory(context->device, memory);
 }
 
@@ -1340,15 +1342,15 @@ int main()
     };
 
     std::optional<VulkanBuffer> buffer;
-    if (buffer = createBuffer(&context, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, vertices); !buffer.has_value()) {
+    if (buffer = createBuffer(&context, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertices.size(), vertices.data()); !buffer.has_value()) {
         return EXIT_FAILURE;
     }
 
-    std::vector<Matrix> matrix(context.amountOfFrames);
+    std::vector<UniformBuffer> uniformBuffer(context.amountOfFrames);
 
     std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
     for(uint32_t x=0;x<matrixBuffer.size();x++) {
-        if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, matrix[x]); !matrixBuffer[x].has_value()) {
+        if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformBuffer), &uniformBuffer[x]); !matrixBuffer[x].has_value()) {
             return EXIT_FAILURE;
         }
     }
@@ -1395,8 +1397,8 @@ int main()
     while (handleMessage()) {
     
         for(uint32_t x=0;x<context.amountOfFrames;x++) {
-            matrix[x].rotate_z(0.001);
-            updateUniformBuffer(&context, matrixBuffer[x].value().memory, sizeof(Matrix), matrix[x]);
+            uniformBuffer[x].modelMatrix.rotate_z(0.001);
+            updateUniformBuffer(&context, matrixBuffer[x].value().memory, sizeof(UniformBuffer), &uniformBuffer[x]);
         }
 
         render(&context, buffer.value().buffer, pipeline.first, descriptorSetList);
