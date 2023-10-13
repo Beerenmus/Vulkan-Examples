@@ -1234,34 +1234,23 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
     return std::make_pair<SVulkanPipeline, VulkanPipelineResult>(std::move(pipeline), VulkanPipelineResult::Succes);
 }
 
-std::array<float, 16> createPerspectiveMatrix(float fov, float aspectRatio, float nearPlane, float farPlane)
-{
-    std::array<float, 16> matrix;
-    const float tanHalfFov = tan(fov / 2.0f);
-    const float depth = farPlane - nearPlane;
+std::array<float, 16> createProjectionMatrix(float fov, float aspectRatio, float nearPlane, float farPlane) {
 
-    matrix[0] = 1.0f / (aspectRatio * tanHalfFov);
-    matrix[1] = 0.0f;
-    matrix[2] = 0.0f;
-    matrix[3] = 0.0f;
+    std::array<float, 16> projectionMatrix;
 
-    matrix[4] = 0.0f;
-    matrix[5] = 1.0f / tanHalfFov;
-    matrix[6] = 0.0f;
-    matrix[7] = 0.0f;
+    // Calculate the parameters of the projection matrix
+    float f = 1.0f / std::tan(fov * 0.5f);
+    float rangeInv = 1.0f / (nearPlane - farPlane);
 
-    matrix[8] = 0.0f;
-    matrix[9] = 0.0f;
-    matrix[10] = -(farPlane + nearPlane) / depth;
-    matrix[11] = -(2.0f * farPlane * nearPlane) / depth;
+    // Fill in the projection matrix elements
+    projectionMatrix[0] = f / aspectRatio;  projectionMatrix[4] = 0.0f;     projectionMatrix[8] = 0.0f;                                 projectionMatrix[12] = 0.0f;
+    projectionMatrix[1] = 0.0f;             projectionMatrix[5] = f;        projectionMatrix[9] = 0.0f;                                 projectionMatrix[13] = 0.0f;
+    projectionMatrix[2] = 0.0f;             projectionMatrix[6] = 0.0f;     projectionMatrix[10] = (nearPlane + farPlane) * rangeInv;   projectionMatrix[14] = nearPlane * farPlane * rangeInv * 2.0f;
+    projectionMatrix[3] = 0.0f;             projectionMatrix[7] = 0.0f;     projectionMatrix[11] = -1.0f;                               projectionMatrix[15] = 0.0f;
 
-    matrix[12] = 0.0f;
-    matrix[13] = 0.0f;
-    matrix[14] = -1.0f;
-    matrix[15] = 0.0f;
-
-    return matrix;
+    return projectionMatrix;
 }
+
 
 void destroyPipeline(VulkanContext* context, SVulkanPipeline& pipeline) {
 
