@@ -49,6 +49,7 @@ struct VulkanBuffer
 
 struct UniformBuffer {
     Matrix modelMatrix;
+    Matrix projectionMatrix;
 };
 
 class SVulkanPipeline {
@@ -800,7 +801,7 @@ VulkanContextResult render(VulkanContext *context, VkBuffer buffer, SVulkanPipel
         vkCmdBindPipeline(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
         vkCmdBindDescriptorSets(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &descriptorSet[frameIndex].value(), 0, nullptr);
         vkCmdBindVertexBuffers(context->commandBuffers[frameIndex], 0, 1, &buffer, &size);
-        vkCmdDraw(context->commandBuffers[frameIndex], 3, 1, 0, 0);
+        vkCmdDraw(context->commandBuffers[frameIndex], 6, 1, 0, 0);
 
         vkCmdEndRenderPass(context->commandBuffers[frameIndex]);
         vkEndCommandBuffer(context->commandBuffers[frameIndex]);
@@ -1136,17 +1137,17 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 	std::array<VkVertexInputAttributeDescription, 2> vertexInputAttributeDescriptions {};
 	vertexInputAttributeDescriptions[0].binding = 0;
     vertexInputAttributeDescriptions[0].location = 0;
-    vertexInputAttributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vertexInputAttributeDescriptions[0].format = VK_FORMAT_R32G32B32_SFLOAT;
     vertexInputAttributeDescriptions[0].offset = 0;
 
 	vertexInputAttributeDescriptions[1].binding = 0;
     vertexInputAttributeDescriptions[1].location = 1;
     vertexInputAttributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
-    vertexInputAttributeDescriptions[1].offset = sizeof(float) * 2;
+    vertexInputAttributeDescriptions[1].offset = sizeof(float) * 3;
 
 	std::array<VkVertexInputBindingDescription, 1> vertexInputBindingDescriptions {};
 	vertexInputBindingDescriptions[0].binding = 0;
-    vertexInputBindingDescriptions[0].stride = sizeof(float) * 5;
+    vertexInputBindingDescriptions[0].stride = sizeof(float) * 6;
     vertexInputBindingDescriptions[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 
 	VkPipelineVertexInputStateCreateInfo vertexInputStateCreateInfo {};
@@ -1182,7 +1183,7 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 	VkPipelineRasterizationStateCreateInfo rasterizationState {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
 	    .cullMode = VK_CULL_MODE_FRONT_BIT,
-	    .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+	    .frontFace = VK_FRONT_FACE_CLOCKWISE,
 		.lineWidth = 1.0f
     };
 
@@ -1325,9 +1326,12 @@ int main()
     }
     
     const std::vector<float> vertices {
-        0.0, -0.5, 1.0, 0.0, 0.0,
-        0.5, 0.5, 0.0, 1.0, 0.0,
-        -0.5, 0.5, 0.0, 0.0, 1.0
+        -1.0, -1.0, 0.0, 1.0, 0.0, 0.0,
+        -1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
+         1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+        1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
+        1.0, -1.0, 0.0, 0.0, 1.0, 0.0,
+        -1.0, -1.0, 0.0, 1.0, 0.0, 0.0
     };
 
     std::optional<VulkanBuffer> buffer;
@@ -1336,6 +1340,10 @@ int main()
     }
 
     std::vector<UniformBuffer> uniformBuffer(context.amountOfFrames);
+    for(uint32_t x=0;x<uniformBuffer.size();x++) {
+        uniformBuffer[x].modelMatrix.translate(0, 0, -3.f);
+        uniformBuffer[x].projectionMatrix = createProjectionMatrix(45.f, static_cast<float>(context.width) / context.height, 1.f, 1000.f);
+    }
 
     std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
     for(uint32_t x=0;x<matrixBuffer.size();x++) {
@@ -1368,7 +1376,7 @@ int main()
     }
 
     for(uint32_t x=0;x<context.amountOfFrames;x++) {
-        updateDescriptorBuffer(&context, matrixBuffer[x].value().buffer, sizeof(Matrix), descriptorSetList[x].value(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+        updateDescriptorBuffer(&context, matrixBuffer[x].value().buffer, sizeof(UniformBuffer), descriptorSetList[x].value(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     }
 
     std::vector<VkDescriptorSetLayout> layouts { descriptorSetLayout.value() };
