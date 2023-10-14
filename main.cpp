@@ -44,7 +44,7 @@ struct VulkanBuffer
 {
     VkBuffer buffer;
     VkDeviceMemory memory;
-    VkBufferUsageFlagBits usage;
+    VkBufferUsageFlags usage;
 };
 
 struct UniformBuffer {
@@ -908,7 +908,7 @@ std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilt
 }
 
 template<typename T>
-std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlagBits usage, VkDeviceSize size, const T* vertices)
+std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size, const T* vertices)
 {
 
     VkBuffer buffer;
