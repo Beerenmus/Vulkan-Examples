@@ -49,6 +49,7 @@ struct VulkanBuffer
 
 struct UniformBuffer {
     Matrix modelMatrix;
+    Matrix camera;
     Matrix projectionMatrix;
 };
 
@@ -1293,17 +1294,71 @@ void destroyBuffer(VulkanContext *context, std::optional<VulkanBuffer> buffer)
     vkFreeMemory(context->device, buffer.value().memory, nullptr);
 }
 
+localsystem camera {};
+std::vector<UniformBuffer> uniformBuffer;
+
 bool handleMessage() {
+
+        float step = 0.001f;
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
 			switch (event.type) {
+
 		    	case SDL_EVENT_QUIT:
 			    	return false;
+
 			default:
 				break;
 			}
 		}
+
+        const uint8_t* keystates = SDL_GetKeyboardState(nullptr);
+
+        if(keystates[SDL_SCANCODE_DOWN]) {
+            camera.pos = camera.pos + step * camera.sight;
+        }
+
+        else if(keystates[SDL_SCANCODE_UP]) {
+            camera.pos = camera.pos + (-step) * camera.sight;
+        }
+
+        else if(keystates[SDL_SCANCODE_LEFT]) {
+            camera.pos = camera.pos + (-step) * camera.right;
+        }
+
+        else if(keystates[SDL_SCANCODE_RIGHT]) {
+            camera.pos = camera.pos + step * camera.right;
+        }
+
+        if(keystates[SDL_SCANCODE_D]) {
+
+            Matrix matrix;
+            
+            for(uint32_t x=0;x<uniformBuffer.size();x++) {
+
+
+                matrix.translate(-camera.pos.wx, -camera.pos.wy, -camera.pos.wz);
+                matrix.rotate_y(-0.01);
+                matrix.translate(camera.pos.wx, camera.pos.wy, camera.pos.wz);
+            
+                camera = matrix * camera;
+            }
+        }
+
+        else if(keystates[SDL_SCANCODE_A]) {
+
+            Matrix matrix;
+            
+            for(uint32_t x=0;x<uniformBuffer.size();x++) {
+
+                matrix.translate(-camera.pos.wx, -camera.pos.wy, -camera.pos.wz);
+                matrix.rotate_y(0.01);
+                matrix.translate(camera.pos.wx, camera.pos.wy, camera.pos.wz);
+            
+                camera = matrix * camera;
+            }
+        }
         
 		return true;
 	}
@@ -1339,10 +1394,15 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::vector<UniformBuffer> uniformBuffer(context.amountOfFrames);
+    camera.pos.wz += 3;
+
+    uniformBuffer.resize(context.amountOfFrames);
+
     for(uint32_t x=0;x<uniformBuffer.size();x++) {
-        uniformBuffer[x].modelMatrix.translate(0, 0, -3.f);
         uniformBuffer[x].projectionMatrix = createProjectionMatrix(45.f, static_cast<float>(context.width) / context.height, 1.f, 1000.f);
+
+        uniformBuffer[x].camera.translate(-camera.pos.wx, -camera.pos.wy, -camera.pos.wz);
+        uniformBuffer[x].camera.rows(camera.right, camera.up, camera.sight);
     }
 
     std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
@@ -1396,6 +1456,10 @@ int main()
         for(uint32_t x=0;x<context.amountOfFrames;x++) {
             uniformBuffer[x].modelMatrix.rotate_z(0.001);
             updateUniformBuffer(&context, matrixBuffer[x].value().memory, sizeof(UniformBuffer), &uniformBuffer[x]);
+
+            uniformBuffer[x].camera.clear();
+            uniformBuffer[x].camera.translate(-camera.pos.wx, -camera.pos.wy, -camera.pos.wz);
+            uniformBuffer[x].camera.rows(camera.right, camera.up, camera.sight);
         }
 
         render(&context, buffer.value().buffer, pipeline.first, descriptorSetList);

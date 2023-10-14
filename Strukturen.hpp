@@ -31,3 +31,6 @@
 
 		localsystem() : pos(0, 0, 0), right(1, 0, 0), up(0, 1, 0), sight(0, 0, 1) {}
 	};
+
+	vector operator * (float a, vector b);
+	vertex operator + (vertex a, vector b);

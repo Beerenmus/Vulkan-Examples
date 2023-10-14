@@ -12,3 +12,11 @@ void vector::normalized() {
 	y /= length;
 	z /= length;
 }
+
+	vector operator * (float a, vector b) {
+		return vector(a * b.x, a * b.y, a * b.z);
+	}
+
+	vertex operator + (vertex a, vector b) {
+		return vertex(a.wx + b.x, a.wy + b.y, a.wz + b.z);
+	}
