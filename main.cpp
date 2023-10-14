@@ -505,7 +505,7 @@ NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
     VkAttachmentReference attachmentReference{
 
         .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL};
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
 
     VkSubpassDescription subpassDescription{
 
