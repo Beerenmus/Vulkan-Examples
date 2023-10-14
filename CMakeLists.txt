@@ -18,6 +18,14 @@ add_executable(engine
     Strukturen.cpp
 )
 
+if(UNIX)
+add_custom_target(build_shaders ALL
+    COMMAND "${PROJECT_SOURCE_DIR}/shaders/compile.sh"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/shaders"
+)
+endif(UNIX)
+
+add_dependencies(engine build_shaders)
 target_include_directories(engine PUBLIC libs/SDL/include)
 target_link_libraries(engine PUBLIC SDL3::SDL3)
 target_include_directories(engine PUBLIC ${Vulkan_INCLUDE_DIRS})

@@ -1440,7 +1440,7 @@ int main()
     }
 
     std::vector<VkDescriptorSetLayout> layouts { descriptorSetLayout.value() };
-    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "../shader/VertexShader.spv", "../shader/FragmentShader.spv", layouts);
+    std::pair<SVulkanPipeline, VulkanPipelineResult> pipeline = createPipeline(&context, "../shaders/VertexShader.spv", "../shaders/FragmentShader.spv", layouts);
     if (pipeline.second != VulkanPipelineResult::Succes) {
         std::cout << pipelineErrorToString(pipeline.second) << std::endl;
         destroyBuffer(&context, buffer);
