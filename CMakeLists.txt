@@ -16,6 +16,13 @@ add_executable(engine
     Matrix.cpp
     Strukturen.hpp
     Strukturen.cpp
+    cmd_bind_descriptor_sets.hpp 
+    cmd_bind_graphics_descriptor_sets.hpp 
+    cmd_bind_graphics_pipeline.hpp 
+    cmd_bind_pipeline.hpp 
+    cmd_bind_vertex_buffers.hpp 
+    cmd_draw.hpp 
+    command.hpp
 )
 
 if(UNIX)

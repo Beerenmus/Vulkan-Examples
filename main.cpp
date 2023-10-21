@@ -11,6 +11,11 @@
 
 #include "Matrix.hpp"
 
+#include "cmd_bind_graphics_descriptor_sets.hpp"
+#include "cmd_bind_graphics_pipeline.hpp"
+#include "cmd_bind_vertex_buffers.hpp"
+#include "cmd_draw.hpp"
+
 #define NODISCARD [[nodiscard]]
 
 using PhysicalDeviceList = std::vector<VkPhysicalDevice>;
@@ -764,7 +769,7 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult render(VulkanContext *context, VkBuffer buffer, SVulkanPipeline& pipeline, std::vector<std::optional<VkDescriptorSet>>& descriptorSet)
+VulkanContextResult render(VulkanContext *context, std::vector<CommandList>& commands)
 {
         uint32_t frameIndex = context->frameIndex;
         VkCommandPool commandPool = context->commandPools[frameIndex];
@@ -798,11 +803,9 @@ VulkanContextResult render(VulkanContext *context, VkBuffer buffer, SVulkanPipel
         renderPassBeginInfo.pClearValues = &clearValue;
         vkCmdBeginRenderPass(context->commandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        VkDeviceSize size = 0;
-        vkCmdBindPipeline(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.pipeline);
-        vkCmdBindDescriptorSets(context->commandBuffers[frameIndex], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.layout, 0, 1, &descriptorSet[frameIndex].value(), 0, nullptr);
-        vkCmdBindVertexBuffers(context->commandBuffers[frameIndex], 0, 1, &buffer, &size);
-        vkCmdDraw(context->commandBuffers[frameIndex], 6, 1, 0, 0);
+        for(auto &cmd : commands[frameIndex]) {
+            cmd->record(context->commandBuffers[frameIndex]);
+        }
 
         vkCmdEndRenderPass(context->commandBuffers[frameIndex]);
         vkEndCommandBuffer(context->commandBuffers[frameIndex]);
@@ -1448,6 +1451,14 @@ int main()
         return EXIT_FAILURE;
     }
 
+    std::vector<CommandList> commands(context.amountOfFrames);
+    for(uint32_t x=0; x<context.amountOfFrames; x++) {
+        commands[x].push_back(make_cmd_bind_vertex_buffers(0, buffer->buffer));
+        commands[x].push_back(make_cmd_bind_graphics_descriptor_sets(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() }));
+        commands[x].push_back(make_cmd_bind_graphics_pipeline(pipeline.first.pipeline));
+        commands[x].push_back(make_cmd_draw(6, 1, 0, 0));
+    }
+
     SDL_ShowWindow(window);
 
     bool running = true;
@@ -1462,7 +1473,7 @@ int main()
             uniformBuffer[x].camera.rows(camera.right, camera.up, camera.sight);
         }
 
-        render(&context, buffer.value().buffer, pipeline.first, descriptorSetList);
+        render(&context, commands);
     }
 
     SDL_HideWindow(window);
