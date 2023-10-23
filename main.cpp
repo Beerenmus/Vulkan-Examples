@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string.h>
 #include <array>
+#include <span>
 
 #include<SDL.h>
 #include<SDL_vulkan.h>
@@ -769,7 +770,7 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult render(VulkanContext *context, std::vector<CommandList>& commands)
+VulkanContextResult render(VulkanContext *context, std::span<const CommandList> commands)
 {
         uint32_t frameIndex = context->frameIndex;
         VkCommandPool commandPool = context->commandPools[frameIndex];
@@ -1098,7 +1099,7 @@ void updateUniformBuffer(VulkanContext* context, VkDeviceMemory memory, VkDevice
     vkUnmapMemory(context->device, memory);
 }
 
-NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline(VulkanContext *context, std::string vertexShaderFile, std::string fragmentShaderFile, std::vector<VkDescriptorSetLayout> descriptorSetLayout = {})
+NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline(VulkanContext *context, std::string vertexShaderFile, std::string fragmentShaderFile, std::span<const VkDescriptorSetLayout> descriptorSetLayout = {})
 {
 
     SVulkanPipeline pipeline;
