@@ -23,6 +23,7 @@ add_executable(engine
     cmd_bind_vertex_buffers.hpp 
     cmd_draw.hpp 
     command.hpp
+    command_buffer.hpp
 )
 
 if(UNIX)

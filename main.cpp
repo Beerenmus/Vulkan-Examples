@@ -12,10 +12,7 @@
 
 #include "Matrix.hpp"
 
-#include "cmd_bind_graphics_descriptor_sets.hpp"
-#include "cmd_bind_graphics_pipeline.hpp"
-#include "cmd_bind_vertex_buffers.hpp"
-#include "cmd_draw.hpp"
+#include "command_buffer.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -770,7 +767,7 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult render(VulkanContext *context, std::span<const CommandList> commands)
+VulkanContextResult render(VulkanContext *context, std::span<CommandBuffer> commands)
 {
         uint32_t frameIndex = context->frameIndex;
         VkCommandPool commandPool = context->commandPools[frameIndex];
@@ -804,9 +801,7 @@ VulkanContextResult render(VulkanContext *context, std::span<const CommandList> 
         renderPassBeginInfo.pClearValues = &clearValue;
         vkCmdBeginRenderPass(context->commandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        for(auto &cmd : commands[frameIndex]) {
-            cmd->record(context->commandBuffers[frameIndex]);
-        }
+        commands[frameIndex].record(context->commandBuffers[frameIndex]);
 
         vkCmdEndRenderPass(context->commandBuffers[frameIndex]);
         vkEndCommandBuffer(context->commandBuffers[frameIndex]);
@@ -1452,12 +1447,12 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::vector<CommandList> commands(context.amountOfFrames);
+    std::vector<CommandBuffer> commands(context.amountOfFrames);
     for(uint32_t x=0; x<context.amountOfFrames; x++) {
-        commands[x].push_back(make_cmd_bind_vertex_buffers(0, buffer->buffer));
-        commands[x].push_back(make_cmd_bind_graphics_descriptor_sets(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() }));
-        commands[x].push_back(make_cmd_bind_graphics_pipeline(pipeline.first.pipeline));
-        commands[x].push_back(make_cmd_draw(6, 1, 0, 0));
+        commands[x].addBindVertexBuffers(0, buffer->buffer);
+        commands[x].addBindGraphicsDescriptorSets(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() });
+        commands[x].addBindGraphicsPipeline(pipeline.first.pipeline);
+        commands[x].addCmdDraw(6, 1, 0, 0);
     }
 
     SDL_ShowWindow(window);

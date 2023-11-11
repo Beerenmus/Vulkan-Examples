@@ -13,10 +13,6 @@ class CmdBindVertexBuffers final : public Command {
         void record(VkCommandBuffer commandbuffer);
 };
 
-std::shared_ptr<Command> make_cmd_bind_vertex_buffers(uint32_t first_binding, VkBuffer buffer) {
-    return std::make_shared<CmdBindVertexBuffers>(first_binding, buffer);
-}
-
 void CmdBindVertexBuffers::record(VkCommandBuffer commandbuffer) {
     VkDeviceSize offset = 0;
     vkCmdBindVertexBuffers(commandbuffer, m_first_binding, 1, &m_buffer, &offset);
