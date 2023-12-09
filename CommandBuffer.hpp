@@ -4,11 +4,11 @@
 #include<memory>
 #include<utility>
 
-#include "command.hpp"
-#include "cmd_bind_graphics_descriptor_sets.hpp"
-#include "cmd_bind_graphics_pipeline.hpp"
-#include "cmd_bind_vertex_buffers.hpp"
-#include "cmd_draw.hpp"
+#include "Command.hpp"
+#include "CmdBindVertexBuffers.hpp"
+#include "CmdBindGraphicsDescriptorSets.hpp"
+#include "CmdBindGraphicsPipeline.hpp"
+#include "CmdDraw.hpp"
 
 class CommandBuffer {
 

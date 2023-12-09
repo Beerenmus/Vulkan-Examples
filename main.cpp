@@ -7,12 +7,14 @@
 #include <array>
 #include <span>
 
+#include <vulkan/vulkan.hpp>
+
 #include<SDL.h>
 #include<SDL_vulkan.h>
 
 #include "Matrix.hpp"
 
-#include "command_buffer.hpp"
+#include "CommandBuffer.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -136,7 +138,6 @@ struct VulkanContext
 
 NODISCARD std::string vulkanErrorToString(VulkanContextResult result)
 {
-
     switch (result)
     {
 
@@ -262,7 +263,6 @@ NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext *context)
 
 NODISCARD uint32_t findGraphicsQueueFamily(std::vector<VkQueueFamilyProperties> &queueFamilies)
 {
-
     uint32_t queueFamilyIndex = 0;
 
     for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++)
@@ -279,7 +279,6 @@ NODISCARD uint32_t findGraphicsQueueFamily(std::vector<VkQueueFamilyProperties> 
 
 NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensionList extensions)
 {
-
     VkPhysicalDevice physicalDevice = context->physicalDevice;
     if (!physicalDevice)
         return FailedCreateDevice;
@@ -326,7 +325,6 @@ NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensi
 
 NODISCARD VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
 {
-
     VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
 
     for (const auto &availablePresentMode : availablePresentModes)
@@ -373,7 +371,6 @@ NODISCARD VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR &capabilities)
 
 NODISCARD VkSurfaceFormatKHR chooseSurfaceFormat(const VkPhysicalDevice physicalDevice, const std::vector<VkSurfaceFormatKHR> &availableFormats, const VkImageUsageFlags usage)
 {
-
     uint32_t index = 0;
     for (uint32_t x = 0; x < availableFormats.size(); x++)
     {
@@ -398,7 +395,6 @@ NODISCARD VkSurfaceFormatKHR chooseSurfaceFormat(const VkPhysicalDevice physical
 
 NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, VkImageUsageFlags usage)
 {
-
     VkSurfaceKHR surface = context->surface;
 
     uint32_t amountOfSurfaceFormats;
@@ -458,7 +454,6 @@ NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, VkIm
 
 NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
 {
-
     if (!context->swapchain || context->images.empty())
         return VulkanContextResult::FailedCreateSwapchainViewImages;
 
@@ -493,7 +488,6 @@ NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
 
 NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
 {
-
     VkAttachmentDescription attachmentDescription{
 
         .format = context->swapchainFormat,
@@ -585,7 +579,6 @@ NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context
 
 NODISCARD VulkanContextResult createCommandPool(VulkanContext *context)
 {
-
     if (!context->device)
         return FailedCreateCommandPool;
 
@@ -685,14 +678,11 @@ NODISCARD VulkanContextResult createSemaphore(VulkanContext *context)
 
 NODISCARD VulkanContextResult recordCommandBuffer(VulkanContext *context)
 {
-
     return VulkanContextResult::Success;
 }
 
 NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *context)
 {
-
-    
     uint32_t count;
     SDL_Vulkan_GetInstanceExtensions(&count, nullptr);
     InstanceExtensionList extensions(count);
@@ -786,7 +776,7 @@ VulkanContextResult render(VulkanContext *context, std::span<CommandBuffer> comm
             std::cout << "Error: Acquire Next Image" << std::endl;
         }
 
-        
+
         VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         result = vkBeginCommandBuffer(context->commandBuffers[frameIndex], &beginInfo);
@@ -1261,7 +1251,6 @@ void destroyPipeline(VulkanContext* context, SVulkanPipeline& pipeline) {
 
 NODISCARD static std::string pipelineErrorToString(VulkanPipelineResult result)
 {
-
     switch (result)
     {
     case FailedReadVertexFile:

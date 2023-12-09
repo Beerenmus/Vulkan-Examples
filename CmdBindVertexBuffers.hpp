@@ -1,6 +1,6 @@
 #pragma once
 
-#include "command.hpp"
+#include "Command.hpp"
 
 class CmdBindVertexBuffers final : public Command {
 

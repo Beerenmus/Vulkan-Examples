@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cmd_bind_descriptor_sets.hpp"
+#include "CmdBindDescriptorSets.hpp"
 
 class CmdBindGraphicsDescriptorSets final : public CmdBindDescriptorSets {
 

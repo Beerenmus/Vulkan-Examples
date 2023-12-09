@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cmd_bind_pipeline.hpp"
+#include "CmdBindPipeline.hpp"
 
 class CmdBindGraphicsPipeline final : public CmdBindPipeline {
 
