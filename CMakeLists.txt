@@ -24,7 +24,6 @@ add_executable(engine
     CmdDraw.hpp 
     Command.hpp 
     CommandBuffer.hpp
-    CommandGraph.hpp
 )
 
 if(UNIX)

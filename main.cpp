@@ -36,7 +36,9 @@ enum VulkanContextResult
     FailedCreateFence,
     FailedRecordCommandBuffer,
     FailedVulkanRendering,
-    FailedCreateSemaphore
+    FailedCreateSemaphore,
+    FailedCreateBuffer,
+    FailedCreateStagingBuffer
 };
 
 struct VulkanQueue
@@ -106,6 +108,7 @@ struct VulkanContext
     VkPhysicalDevice physicalDevice;
 
     VulkanQueue graphics;
+    VulkanQueue transfer;
 
     VkDevice device;
 
@@ -124,6 +127,8 @@ struct VulkanContext
     VulkanFramebufferList framebuffers;
 
     VulkanCommandPoolList commandPools;
+    VkCommandPool transferCommandPool;
+
     VulkanCommandBufferList commandBuffers;
 
     uint32_t amountOfFrames;
@@ -167,6 +172,10 @@ NODISCARD std::string vulkanErrorToString(VulkanContextResult result)
         return std::string("Error: Failed to record vulkan command buffer");
     case VulkanContextResult::FailedCreateSemaphore:
         return std::string("Error: Failed to create vulkan semaphore");
+    case VulkanContextResult::FailedCreateStagingBuffer:
+        return std::string("Error: Failed to create staging vulkan buffer");
+    case VulkanContextResult::FailedCreateBuffer:
+        return std::string("Error: Failed to create vulkan buffer");
     }
 
     return std::string();
@@ -185,7 +194,7 @@ NODISCARD VulkanContextResult createVulkanInstance(VulkanContext *context, Insta
         .applicationVersion = VK_MAKE_VERSION(0, 0, 1),
         .pEngineName = "Vulkan",
         .engineVersion = VK_MAKE_VERSION(0, 0, 1),
-        .apiVersion = VK_API_VERSION_1_2
+        .apiVersion = VK_API_VERSION_1_3
     };
 
     VkInstanceCreateInfo instanceCreateInfo {
@@ -277,6 +286,22 @@ NODISCARD uint32_t findGraphicsQueueFamily(std::vector<VkQueueFamilyProperties> 
     return queueFamilyIndex;
 }
 
+NODISCARD uint32_t findTransferQueueFamily(std::vector<VkQueueFamilyProperties> &queueFamilies) {
+
+    uint32_t queueFamilyIndex = 0;
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++)
+    {
+        if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+        {
+            queueFamilyIndex = i;
+            break;
+        }
+    }
+
+    return queueFamilyIndex;
+}
+
 NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensionList extensions)
 {
     VkPhysicalDevice physicalDevice = context->physicalDevice;
@@ -288,37 +313,84 @@ NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensi
     std::vector<VkQueueFamilyProperties> queueFamilies(amountOfDeviceQueueFamilyProperties);
     vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &amountOfDeviceQueueFamilyProperties, &queueFamilies[0]);
 
-    uint32_t familyIndex = findGraphicsQueueFamily(queueFamilies);
+    uint32_t graphicsfamilyIndex = findGraphicsQueueFamily(queueFamilies);
+    uint32_t transferFamilyIndex = findTransferQueueFamily(queueFamilies);
 
-    float priorities[] = {1.0f};
+    float priorities[] = {1.0f, 1.0};
 
-    VkDeviceQueueCreateInfo deviceQueueCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = {},
-        .queueFamilyIndex = familyIndex,
-        .queueCount = 1,
-        .pQueuePriorities = priorities};
+    std::vector<VkDeviceQueueCreateInfo> deviceQueueCreateInfos;
+
+    {
+        auto iter = std::find_if(deviceQueueCreateInfos.begin(), deviceQueueCreateInfos.end(), [familyIndex = graphicsfamilyIndex](VkDeviceQueueCreateInfo &deviceQueueCreateInfo){
+            return deviceQueueCreateInfo.queueFamilyIndex == familyIndex;
+        });
+
+        if(iter != deviceQueueCreateInfos.end()) {
+            iter->queueCount += 1;
+        }
+
+        else {
+
+            VkDeviceQueueCreateInfo deviceQueueCreateInfo;
+
+            deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            deviceQueueCreateInfo.pNext = nullptr;
+            deviceQueueCreateInfo.flags = {};
+            deviceQueueCreateInfo.queueFamilyIndex = graphicsfamilyIndex;
+            deviceQueueCreateInfo.queueCount = 1;
+            deviceQueueCreateInfo.pQueuePriorities = priorities;
+
+            deviceQueueCreateInfos.push_back(deviceQueueCreateInfo);
+        }
+    }
+
+    {
+        auto iter = std::find_if(deviceQueueCreateInfos.begin(), deviceQueueCreateInfos.end(), [familyIndex = transferFamilyIndex](VkDeviceQueueCreateInfo &deviceQueueCreateInfo){
+            return deviceQueueCreateInfo.queueFamilyIndex == familyIndex;
+        });
+
+        if(iter != deviceQueueCreateInfos.end()) {
+            iter->queueCount += 1;
+        }
+
+        else {
+
+            VkDeviceQueueCreateInfo deviceQueueCreateInfo;
+
+            deviceQueueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+            deviceQueueCreateInfo.pNext = nullptr;
+            deviceQueueCreateInfo.flags = {};
+            deviceQueueCreateInfo.queueFamilyIndex = transferFamilyIndex;
+            deviceQueueCreateInfo.queueCount = 1;
+            deviceQueueCreateInfo.pQueuePriorities = priorities;
+
+            deviceQueueCreateInfos.push_back(deviceQueueCreateInfo);
+        }
+    }
 
     VkPhysicalDeviceFeatures enabledFeatures = {};
 
-    VkDeviceCreateInfo createInfo{
+    VkDeviceCreateInfo createInfo {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .pNext = nullptr,
         .flags = {},
-        .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &deviceQueueCreateInfo,
+        .queueCreateInfoCount = static_cast<uint32_t>(deviceQueueCreateInfos.size()),
+        .pQueueCreateInfos = deviceQueueCreateInfos.data(),
         .enabledExtensionCount = static_cast<uint32_t>(extensions.size()),
         .ppEnabledExtensionNames = extensions.data(),
-        .pEnabledFeatures = &enabledFeatures};
+        .pEnabledFeatures = &enabledFeatures
+    };
 
     if (VkResult result = vkCreateDevice(physicalDevice, &createInfo, nullptr, &context->device); result != VK_SUCCESS)
     {
         return VulkanContextResult::FailedCreateDevice;
     }
 
-    context->graphics.familyIndex = familyIndex;
-    vkGetDeviceQueue(context->device, familyIndex, 0, &context->graphics.queue);
+    context->graphics.familyIndex = graphicsfamilyIndex;
+    vkGetDeviceQueue(context->device, graphicsfamilyIndex, 0, &context->graphics.queue);
+
+    context->transfer.familyIndex = transferFamilyIndex;
+    vkGetDeviceQueue(context->device, transferFamilyIndex, 0, &context->transfer.queue);
 
     return VulkanContextResult::Success;
 }
@@ -600,6 +672,27 @@ NODISCARD VulkanContextResult createCommandPool(VulkanContext *context)
     return VulkanContextResult::Success;
 }
 
+NODISCARD VulkanContextResult createTransferCommandPool(VulkanContext * context) {
+
+    if (!context->device)
+        return FailedCreateCommandPool;
+
+    VkCommandPoolCreateInfo commandPoolCreateInfo {
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .pNext = nullptr,
+        .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+        .queueFamilyIndex = context->transfer.familyIndex 
+    };
+
+
+    if (VkResult result = vkCreateCommandPool(context->device, &commandPoolCreateInfo, nullptr, &context->transferCommandPool); result != VK_SUCCESS)
+    {
+        return VulkanContextResult::FailedCreateCommandPool;
+    }
+    
+    return VulkanContextResult::Success;
+}
+
 NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context)
 {
 
@@ -729,7 +822,13 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     {
         return VulkanContextResult::FailedCreateSwapchainFramebuffer;
     }
-    if (createCommandPool(context) == VulkanContextResult::FailedCreateCommandPool)
+
+    if(createCommandPool(context) == VulkanContextResult::FailedCreateCommandPool)
+    {
+        return VulkanContextResult::FailedCreateCommandPool;
+    }
+
+    if(createTransferCommandPool(context) == VulkanContextResult::FailedCreateCommandPool) 
     {
         return VulkanContextResult::FailedCreateCommandPool;
     }
@@ -849,6 +948,8 @@ void terminateVulkan(VulkanContext *context)
             vkDestroyFence(context->device, fence, nullptr);
         }
 
+        vkDestroyCommandPool(context->device, context->transferCommandPool, nullptr);
+
         for(VkCommandPool pool : context->commandPools) {
             vkDestroyCommandPool(context->device, pool, nullptr);
         }
@@ -896,9 +997,7 @@ std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilt
     return std::nullopt;
 }
 
-template<typename T>
-std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlags usage, VkDeviceSize size, const T* vertices)
-{
+std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkDeviceSize size) {
 
     VkBuffer buffer;
 
@@ -920,7 +1019,7 @@ std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFl
     VkMemoryRequirements memoryRequirements;
     vkGetBufferMemoryRequirements(context->device, buffer, &memoryRequirements);
 
-    std::optional<uint32_t> memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    std::optional<uint32_t> memoryTypeIndex = findMemoryType(context, memoryRequirements.memoryTypeBits, properties);
     if (!memoryTypeIndex.has_value())
     {
         return std::nullopt;
@@ -940,12 +1039,107 @@ std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFl
 
     vkBindBufferMemory(context->device, buffer, memory, 0);
 
-    void* map;
-    vkMapMemory(context->device, memory, 0, bufferCreateInfo.size, 0, &map);
-    memcpy(map, vertices, static_cast<size_t>(bufferCreateInfo.size));
-    vkUnmapMemory(context->device, memory);
-
     return std::optional<VulkanBuffer>({buffer, memory, usage});
+}
+
+template<typename T>
+std::optional<VulkanBuffer> createBuffer(VulkanContext *context, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, std::vector<T> &vertices)
+{
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+    auto buffer = createBuffer(context, usage, properties, bufferSize);
+
+    if(buffer.has_value()) {
+        void* map;
+        vkMapMemory(context->device, buffer.value().memory, 0, bufferSize, 0, &map);
+        memcpy(map, vertices.data(), static_cast<size_t>(bufferSize));
+        vkUnmapMemory(context->device, buffer.value().memory);
+    }
+
+    return buffer;
+}
+
+void copyBuffer(VulkanContext* context, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
+
+    VkCommandBuffer commandBuffer;
+
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo;
+
+    commandBufferAllocateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    commandBufferAllocateInfo.pNext = nullptr;
+    commandBufferAllocateInfo.commandPool = context->transferCommandPool;
+    commandBufferAllocateInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    commandBufferAllocateInfo.commandBufferCount = 1;
+
+    VkResult result = vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &commandBuffer);
+    if(result != VK_SUCCESS) {
+        return;
+    }
+
+    VkCommandBufferBeginInfo commandBufferBeginInfo;
+    commandBufferBeginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    commandBufferBeginInfo.pNext = nullptr;
+    commandBufferBeginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    commandBufferBeginInfo.pInheritanceInfo = nullptr;
+
+    result = vkBeginCommandBuffer(commandBuffer, &commandBufferBeginInfo);
+    if(result != VK_SUCCESS) {
+        return;
+    }
+
+    VkBufferCopy bufferCopy;
+    bufferCopy.srcOffset = 0;
+    bufferCopy.dstOffset = 0;
+    bufferCopy.size = size;
+
+    vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &bufferCopy);
+
+    result = vkEndCommandBuffer(commandBuffer);
+    if(result != VK_SUCCESS) {
+        return;
+    }
+
+    VkPipelineStageFlags stageMask = VK_PIPELINE_STAGE_NONE;
+
+    VkSubmitInfo submitInfo;
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = nullptr;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = nullptr;
+    submitInfo.pWaitDstStageMask = &stageMask;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.signalSemaphoreCount = 0;
+    submitInfo.pSignalSemaphores = nullptr;
+
+    vkQueueSubmit(context->transfer.queue, 1, &submitInfo, VK_NULL_HANDLE);
+
+    result = vkQueueWaitIdle(context->transfer.queue);
+    if(result != VK_SUCCESS) {
+        return;
+    }
+
+    vkFreeCommandBuffers(context->device, context->transferCommandPool, 1, &commandBuffer);
+}
+
+template<typename T>
+std::optional<VulkanBuffer> createVertexStagingBuffer(VulkanContext *context, std::vector<T> &vertices) {
+
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    auto stagingBuffer = createBuffer(context, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertices); 
+
+    if(!stagingBuffer.has_value()) {
+        return std::nullopt;
+    }
+
+    auto buffer = createBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bufferSize);
+
+    copyBuffer(context, stagingBuffer.value().buffer, buffer.value().buffer, bufferSize);
+
+    vkFreeMemory(context->device, stagingBuffer.value().memory, nullptr);
+    vkDestroyBuffer(context->device, stagingBuffer.value().buffer, nullptr);
+
+    return buffer;
 }
 
 enum VulkanPipelineResult
@@ -1368,7 +1562,7 @@ int main()
         return EXIT_FAILURE;
     }
     
-    const std::vector<float> vertices {
+    std::vector<float> vertices {
         -1.0, -1.0, 0.0, 1.0, 0.0, 0.0,
         -1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
          1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
@@ -1378,7 +1572,7 @@ int main()
     };
 
     std::optional<VulkanBuffer> buffer;
-    if (buffer = createBuffer(&context, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, sizeof(float) * vertices.size(), vertices.data()); !buffer.has_value()) {
+    if (buffer = createVertexStagingBuffer(&context, vertices); !buffer.has_value()) {
         return EXIT_FAILURE;
     }
 
@@ -1395,7 +1589,7 @@ int main()
 
     std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
     for(uint32_t x=0;x<matrixBuffer.size();x++) {
-        if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, sizeof(UniformBuffer), &uniformBuffer[x]); !matrixBuffer[x].has_value()) {
+        if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, uniformBuffer); !matrixBuffer[x].has_value()) {
             return EXIT_FAILURE;
         }
     }
