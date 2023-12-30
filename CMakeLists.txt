@@ -22,6 +22,8 @@ add_executable(engine
     CmdBindPipeline.hpp 
     CmdBindVertexBuffers.hpp 
     CmdDraw.hpp 
+    CmdBindIndexBuffer.hpp
+    CmdDrawIndexed.hpp
     Command.hpp 
     CommandBuffer.hpp
 )

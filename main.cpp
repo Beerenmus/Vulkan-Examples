@@ -1142,6 +1142,27 @@ std::optional<VulkanBuffer> createVertexStagingBuffer(VulkanContext *context, st
     return buffer;
 }
 
+template<typename T>
+std::optional<VulkanBuffer> createIndexStagingBuffer(VulkanContext *context, std::vector<T> &vertices) {
+
+    VkDeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
+
+    auto stagingBuffer = createBuffer(context, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, vertices); 
+
+    if(!stagingBuffer.has_value()) {
+        return std::nullopt;
+    }
+
+    auto buffer = createBuffer(context, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, bufferSize);
+
+    copyBuffer(context, stagingBuffer.value().buffer, buffer.value().buffer, bufferSize);
+
+    vkFreeMemory(context->device, stagingBuffer.value().memory, nullptr);
+    vkDestroyBuffer(context->device, stagingBuffer.value().buffer, nullptr);
+
+    return buffer;
+}
+
 enum VulkanPipelineResult
 {
     Succes,
@@ -1566,13 +1587,20 @@ int main()
         -1.0, -1.0, 0.0, 1.0, 0.0, 0.0,
         -1.0, 1.0, 0.0, 0.0, 1.0, 0.0,
          1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
-        1.0, 1.0, 0.0, 1.0, 0.0, 1.0,
         1.0, -1.0, 0.0, 0.0, 1.0, 0.0,
-        -1.0, -1.0, 0.0, 1.0, 0.0, 0.0
+    };
+
+    std::vector<uint16_t> indices {
+        0, 1, 2, 2, 3, 0
     };
 
     std::optional<VulkanBuffer> buffer;
     if (buffer = createVertexStagingBuffer(&context, vertices); !buffer.has_value()) {
+        return EXIT_FAILURE;
+    }
+
+    std::optional<VulkanBuffer> indicesBuffer;
+    if (indicesBuffer = createIndexStagingBuffer(&context, indices); !indicesBuffer.has_value()) {
         return EXIT_FAILURE;
     }
 
@@ -1633,9 +1661,10 @@ int main()
     std::vector<CommandBuffer> commands(context.amountOfFrames);
     for(uint32_t x=0; x<context.amountOfFrames; x++) {
         commands[x].addBindVertexBuffers(0, buffer->buffer);
+        commands[x].addBindIndexBuffer(indicesBuffer.value().buffer, VK_INDEX_TYPE_UINT16);
         commands[x].addBindGraphicsDescriptorSets(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() });
         commands[x].addBindGraphicsPipeline(pipeline.first.pipeline);
-        commands[x].addCmdDraw(6, 1, 0, 0);
+        commands[x].addCmdDrawIndexed(6, 1, 0, 0, 0);
     }
 
     SDL_ShowWindow(window);
@@ -1672,6 +1701,7 @@ int main()
         destroyBuffer(&context, matrixBuffer[x]);
     }
 
+    destroyBuffer(&context, indicesBuffer);
     destroyBuffer(&context, buffer);
 
     terminateVulkan(&context);
