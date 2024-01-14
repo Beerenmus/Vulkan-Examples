@@ -965,6 +965,10 @@ void terminateVulkan(VulkanContext *context)
             vkDestroyImageView(context->device, view, nullptr);
         }
 
+        if (context->swapchain) {
+            vkDestroySwapchainKHR(context->device, context->swapchain, nullptr);
+        }
+
         vkDestroyDevice(context->device, nullptr);
     }
 
