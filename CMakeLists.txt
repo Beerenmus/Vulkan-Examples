@@ -35,6 +35,13 @@ add_custom_target(build_shaders ALL
 )
 endif(UNIX)
 
+if(WIN32)
+add_custom_target(build_shaders ALL
+    COMMAND "${PROJECT_SOURCE_DIR}/shaders/compile.bat"
+    WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/shaders"
+)
+endif(WIN32)
+
 add_dependencies(engine build_shaders)
 target_include_directories(engine PUBLIC external/SDL/include)
 target_link_libraries(engine PUBLIC SDL3::SDL3)
