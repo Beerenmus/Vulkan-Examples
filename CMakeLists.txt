@@ -36,7 +36,7 @@ add_custom_target(build_shaders ALL
 endif(UNIX)
 
 add_dependencies(engine build_shaders)
-target_include_directories(engine PUBLIC libs/SDL/include)
+target_include_directories(engine PUBLIC external/SDL/include)
 target_link_libraries(engine PUBLIC SDL3::SDL3)
 target_include_directories(engine PUBLIC ${Vulkan_INCLUDE_DIRS})
 target_link_libraries(engine PUBLIC ${Vulkan_LIBRARIES})
