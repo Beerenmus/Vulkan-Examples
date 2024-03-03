@@ -1,19 +1,21 @@
 #pragma once
 
 #include "Command.hpp"
+#include "Inherit.hpp"
+#include "CommandBuffer.hpp"
 
-class CmdBindVertexBuffers final : public Command {
+class CmdBindVertexBuffers final : public Inherit<CmdBindVertexBuffers, Command> {
 
     private:
-        uint32_t m_first_binding;
+        uint32_t m_firstBinding;
         VkBuffer m_buffer;
 
     public:
-        CmdBindVertexBuffers(uint32_t first_binding, VkBuffer buffer) : m_first_binding(first_binding), m_buffer(buffer) {}
-        void record(VkCommandBuffer commandbuffer);
+        CmdBindVertexBuffers(uint32_t firstBinding, VkBuffer buffer) : m_firstBinding(firstBinding), m_buffer(buffer) {}
+        void record(CommandBuffer::Pointer commandbuffer);
 };
 
-void CmdBindVertexBuffers::record(VkCommandBuffer commandbuffer) {
+void CmdBindVertexBuffers::record(CommandBuffer::Pointer commandbuffer) {
     VkDeviceSize offset = 0;
-    vkCmdBindVertexBuffers(commandbuffer, m_first_binding, 1, &m_buffer, &offset);
+    commandbuffer->bindVertexBuffers(m_firstBinding, 1, &m_buffer, &offset);
 }

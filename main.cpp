@@ -16,6 +16,13 @@
 
 #include "CommandBuffer.hpp"
 
+#include "CommandBuffer.hpp"
+#include "CmdBindDescriptorSets.hpp"
+#include "CmdBindGraphicsPipeline.hpp"
+#include "CmdBindIndexBuffer.hpp"
+#include "CmdBindVertexBuffers.hpp"
+#include "CmdDrawIndexed.hpp"
+
 #define NODISCARD [[nodiscard]]
 
 using PhysicalDeviceList = std::vector<VkPhysicalDevice>;
@@ -856,7 +863,7 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     return VulkanContextResult::Success;
 }
 
-VulkanContextResult render(VulkanContext *context, std::span<CommandBuffer> commands)
+VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Command>> commands)
 {
         uint32_t frameIndex = context->frameIndex;
         VkCommandPool commandPool = context->commandPools[frameIndex];
@@ -890,7 +897,11 @@ VulkanContextResult render(VulkanContext *context, std::span<CommandBuffer> comm
         renderPassBeginInfo.pClearValues = &clearValue;
         vkCmdBeginRenderPass(context->commandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        commands[frameIndex].record(context->commandBuffers[frameIndex]);
+        auto cmdBuffer = CommandBuffer::create(context->commandBuffers[frameIndex]);
+        
+        for(auto command : commands) {
+            command->record(cmdBuffer);
+        }
 
         vkCmdEndRenderPass(context->commandBuffers[frameIndex]);
         vkEndCommandBuffer(context->commandBuffers[frameIndex]);
@@ -1662,13 +1673,13 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::vector<CommandBuffer> commands(context.amountOfFrames);
+    std::vector<std::vector<std::shared_ptr<Command>>> commands(context.amountOfFrames);
     for(uint32_t x=0; x<context.amountOfFrames; x++) {
-        commands[x].addBindVertexBuffers(0, buffer->buffer);
-        commands[x].addBindIndexBuffer(indicesBuffer.value().buffer, VK_INDEX_TYPE_UINT16);
-        commands[x].addBindGraphicsDescriptorSets(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() });
-        commands[x].addBindGraphicsPipeline(pipeline.first.pipeline);
-        commands[x].addCmdDrawIndexed(6, 1, 0, 0, 0);
+        commands[x].push_back(CmdBindVertexBuffers::create(0, buffer->buffer));
+        commands[x].push_back(CmdBindIndexBuffer::create(indicesBuffer.value().buffer, VK_INDEX_TYPE_UINT16));
+        commands[x].push_back(CmdBindDescriptorSets::create(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() }));
+        commands[x].push_back(CmdBindGraphicsPipeline::create(pipeline.first.pipeline));
+        commands[x].push_back(CmdDrawIndexed::create(6, 1, 0, 0, 0));
     }
 
     SDL_ShowWindow(window);
@@ -1685,7 +1696,7 @@ int main()
             uniformBuffer[x].camera.rows(camera.right, camera.up, camera.sight);
         }
 
-        render(&context, commands);
+        render(&context, commands[context.frameIndex]);
     }
 
     SDL_HideWindow(window);

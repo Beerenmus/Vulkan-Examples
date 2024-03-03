@@ -1,83 +1,57 @@
 #pragma once
 
-#include<vector>
+#include<vulkan/vulkan.h>
 #include<memory>
-#include<utility>
+#include "Inherit.hpp"
 
-#include "Command.hpp"
-#include "CmdBindVertexBuffers.hpp"
-#include "CmdBindGraphicsDescriptorSets.hpp"
-#include "CmdBindGraphicsPipeline.hpp"
-#include "CmdDraw.hpp"
-#include "CmdBindIndexBuffer.hpp"
-#include "CmdDrawIndexed.hpp"
-
-class CommandBuffer {
-
-    private:
-        using CommandList = std::vector<std::unique_ptr<Command>>;
-
-        CommandList m_commands;
+class ICommandBuffer {
 
     public:
-        CommandBuffer();
-        CommandBuffer(CommandBuffer&) = delete;
-        CommandBuffer(CommandBuffer&& commandBuffer);
-
-    public:
-        CommandBuffer& operator = (CommandBuffer&) = delete;
-        CommandBuffer& operator = (CommandBuffer&& commandBuffer);
-        
-    public:
-        void addBindGraphicsDescriptorSets(VkPipelineLayout const layout, uint32_t const first_set, std::vector<VkDescriptorSet> const descriptor_sets, std::vector<uint32_t> const dynamic_offsets = {});
-        void addBindGraphicsPipeline(VkPipeline pipeline);
-        void addBindVertexBuffers(uint32_t first_binding, VkBuffer buffer);
-        void addBindIndexBuffer(VkBuffer buffer, VkIndexType type = VK_INDEX_TYPE_UINT16);
-        void addCmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance);
-        void addCmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
-
-    public:
-        void record(VkCommandBuffer commandBuffer);
+        virtual void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
+        virtual void bindIndexBuffer(VkBuffer buffer, VkIndexType type) = 0;
+        virtual void bindVertexBuffers(uint32_t firstBinding, uint32_t bindingCount, const VkBuffer *pBuffers, const VkDeviceSize *pOffsets) = 0;
+        virtual void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
+        virtual void bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets) = 0;
+        virtual void bindPipeline(VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) = 0;
 };
 
-CommandBuffer::CommandBuffer() {
-    m_commands.clear();
+class CommandBuffer : public Inherit<CommandBuffer, ICommandBuffer> {
+
+    private:
+        VkCommandBuffer m_commandBuffer;
+
+    public:
+        CommandBuffer(VkCommandBuffer commandBuffer);
+        void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
+        void bindIndexBuffer(VkBuffer buffer, VkIndexType type) override;
+        void bindVertexBuffers(uint32_t firstBinding, uint32_t bindingCount, const VkBuffer *pBuffers, const VkDeviceSize *pOffsets) override;
+        void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
+        void bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets) override;
+        void bindPipeline(VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) override;
+};
+
+CommandBuffer::CommandBuffer(VkCommandBuffer commandBuffer) : m_commandBuffer(commandBuffer) {}
+
+void CommandBuffer::draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+    vkCmdDraw(m_commandBuffer, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-CommandBuffer::CommandBuffer(CommandBuffer&& commandbuffer) : m_commands(std::exchange(commandbuffer.m_commands, {})) {}
-
-CommandBuffer& CommandBuffer::operator = (CommandBuffer&& commandBuffer) {
-    m_commands = std::exchange(commandBuffer.m_commands, {});
-    return *this;
+void CommandBuffer::bindIndexBuffer(VkBuffer buffer, VkIndexType type) {
+    vkCmdBindIndexBuffer(m_commandBuffer, buffer, 0, type);
 }
 
-void CommandBuffer::addBindGraphicsDescriptorSets(VkPipelineLayout const layout, uint32_t const first_set, std::vector<VkDescriptorSet> const descriptor_sets, std::vector<uint32_t> const dynamic_offsets) {
-    m_commands.push_back(std::make_unique<CmdBindGraphicsDescriptorSets>(layout, first_set, descriptor_sets, dynamic_offsets));
+void CommandBuffer::bindVertexBuffers(uint32_t firstBinding, uint32_t bindingCount, const VkBuffer *pBuffers, const VkDeviceSize *pOffsets) {
+    vkCmdBindVertexBuffers(m_commandBuffer, firstBinding, bindingCount, pBuffers, pOffsets);
 }
 
-void CommandBuffer::addBindGraphicsPipeline(VkPipeline pipeline) {
-    m_commands.push_back(std::make_unique<CmdBindGraphicsPipeline>(pipeline));
+void CommandBuffer::drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    vkCmdDrawIndexed(m_commandBuffer, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-void CommandBuffer::addBindVertexBuffers(uint32_t first_binding, VkBuffer buffer) {
-    m_commands.push_back(std::make_unique<CmdBindVertexBuffers>(first_binding, buffer));    
+void CommandBuffer::bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets) {
+    vkCmdBindDescriptorSets(m_commandBuffer, pipelineBindPoint, layout, firstSet, descriptorSetCount, pDescriptorSets, dynamicOffsetCount, pDynamicOffsets);
 }
 
-void CommandBuffer::addBindIndexBuffer(VkBuffer buffer, VkIndexType type) {
-    m_commands.push_back(std::make_unique<CmdBindIndexBuffer>(buffer, type));
-}
-
-void CommandBuffer::addCmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
-    m_commands.push_back(std::make_unique<CmdDraw>(vertex_count, instance_count, first_vertex, first_instance));
-}
-
-void CommandBuffer::addCmdDrawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
-    m_commands.push_back(std::make_unique<CmdDrawIndexed>(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance));
-}
-
-void CommandBuffer::record(VkCommandBuffer const commandBuffer) {
-
-    for(auto &cmd : m_commands) {
-        cmd->record(commandBuffer);
-    }
+void CommandBuffer::bindPipeline(VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) {
+    vkCmdBindPipeline(m_commandBuffer, pipelineBindPoint, pipeline);
 }

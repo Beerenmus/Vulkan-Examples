@@ -1,24 +1,22 @@
 #pragma once
 
 #include "Command.hpp"
+#include "CommandBuffer.hpp"
+#include "Inherit.hpp"
 
-class CmdDraw : public Command {
+class CmdDraw : public Inherit<CmdDraw, Command> {
 
     private:
-        uint32_t m_vertex_count;
-        uint32_t m_instance_count;
-        uint32_t m_first_vertex;
-        uint32_t m_first_instance;
+        uint32_t m_vertexCount;
+        uint32_t m_instanceCount;
+        uint32_t m_firstVertex;
+        uint32_t m_firstInstance;
 
     public:
-        CmdDraw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) : m_vertex_count(vertex_count), m_instance_count(instance_count), m_first_vertex(first_instance), m_first_instance(first_instance) {}
-        void record(VkCommandBuffer commandbuffer);
+        CmdDraw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) : m_vertexCount(vertexCount), m_instanceCount(instanceCount), m_firstVertex(firstInstance), m_firstInstance(firstInstance) {}
+        void record(CommandBuffer::Pointer commandbuffer) override;
 };
 
-std::shared_ptr<Command> make_cmd_draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) {
-    return std::make_shared<CmdDraw>(vertex_count, instance_count, first_vertex, first_instance);
-}
-
-void CmdDraw::record(VkCommandBuffer commandbuffer) {
-    vkCmdDraw(commandbuffer, m_vertex_count, m_instance_count, m_first_vertex, m_first_instance);
+void CmdDraw::record(CommandBuffer::Pointer commandbuffer) {
+    commandbuffer->draw(m_vertexCount, m_instanceCount, m_firstVertex, m_firstInstance);
 }

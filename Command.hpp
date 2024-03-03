@@ -2,12 +2,12 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
-#include <memory>
+#include "CommandBuffer.hpp"
 
 class Command {
 
     public:
-        virtual void record(VkCommandBuffer commandbuffer) = 0;
+        virtual void record(CommandBuffer::Pointer commandbuffer) = 0;
 };
 
 using CommandList = std::vector<std::shared_ptr<Command>>;

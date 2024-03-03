@@ -1,15 +1,20 @@
 #pragma once
 
-#include "CmdBindPipeline.hpp"
+#include "Command.hpp"
+#include "Inherit.hpp"
 
-class CmdBindGraphicsPipeline final : public CmdBindPipeline {
+class CmdBindGraphicsPipeline final : public Inherit<CmdBindGraphicsPipeline, Command> {
+
+    private:
+        VkPipeline m_pipeline;
 
     public:
-        using CmdBindPipeline::CmdBindPipeline;
-
-        VkPipelineBindPoint get_pipeline_bind_point();
+        CmdBindGraphicsPipeline(VkPipeline pipeline);
+        void record(CommandBuffer::Pointer commandBuffer) override;
 };
 
-VkPipelineBindPoint CmdBindGraphicsPipeline::get_pipeline_bind_point() {
-    return VK_PIPELINE_BIND_POINT_GRAPHICS;
+CmdBindGraphicsPipeline::CmdBindGraphicsPipeline(VkPipeline pipeline) : m_pipeline(pipeline) {}
+
+void CmdBindGraphicsPipeline::record(CommandBuffer::Pointer commandBuffer) {
+    commandBuffer->bindPipeline(VK_PIPELINE_BIND_POINT_GRAPHICS, m_pipeline);
 }

@@ -17,15 +17,14 @@ add_executable(engine
     Strukturen.hpp
     Strukturen.cpp
     CmdBindDescriptorSets.hpp
-    CmdBindGraphicsDescriptorSets.hpp 
     CmdBindGraphicsPipeline.hpp 
-    CmdBindPipeline.hpp 
     CmdBindVertexBuffers.hpp 
     CmdDraw.hpp 
     CmdBindIndexBuffer.hpp
     CmdDrawIndexed.hpp
     Command.hpp 
     CommandBuffer.hpp
+    Inherit.hpp
 )
 
 if(UNIX)
