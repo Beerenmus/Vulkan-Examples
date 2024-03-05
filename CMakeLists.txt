@@ -25,6 +25,8 @@ add_executable(engine
     Command.hpp 
     CommandBuffer.hpp
     Inherit.hpp
+    RenderPass.hpp
+    VkException.hpp
 )
 
 if(UNIX)

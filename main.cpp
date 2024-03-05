@@ -22,6 +22,7 @@
 #include "CmdBindIndexBuffer.hpp"
 #include "CmdBindVertexBuffers.hpp"
 #include "CmdDrawIndexed.hpp"
+#include "RenderPass.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -126,7 +127,7 @@ struct VulkanContext
     VulkanImageList images;
     VulkanImageViewList imageViews;
 
-    VkRenderPass renderPass;
+    RenderPass::Pointer renderPass;
 
     uint32_t width;
     uint32_t height;
@@ -565,58 +566,11 @@ NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createRenderPass(VulkanContext *context)
-{
-    VkAttachmentDescription attachmentDescription{
+NODISCARD VulkanContextResult createRenderPass(VulkanContext *context) {
 
-        .format = context->swapchainFormat,
-        .samples = VK_SAMPLE_COUNT_1_BIT,
-        .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR};
+   context->renderPass = createRenderPass(context->device, context->swapchainFormat);
 
-    VkAttachmentReference attachmentReference{
-
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
-
-    VkSubpassDescription subpassDescription{
-
-        .flags = {},
-        .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-        .inputAttachmentCount = 0,
-        .pInputAttachments = nullptr,
-        .colorAttachmentCount = 1,
-        .pColorAttachments = &attachmentReference,
-        .pResolveAttachments = nullptr,
-        .pDepthStencilAttachment = nullptr,
-        .preserveAttachmentCount = 0,
-        .pPreserveAttachments = nullptr};
-    /*
-        vk::SubpassDependency subpassDependency;
-        subpassDependency.setSrcSubpass(VK_SUBPASS_EXTERNAL);
-        subpassDependency.setDstSubpass(0);
-        subpassDependency.setSrcStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        subpassDependency.setSrcAccessMask(vk::AccessFlagBits::eNone);
-        subpassDependency.setDstStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        subpassDependency.setDstAccessMask(vk::AccessFlagBits::eColorAttachmentWrite);
-    */
-
-    VkRenderPassCreateInfo renderPassCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .attachmentCount = 1,
-        .pAttachments = &attachmentDescription,
-        .subpassCount = 1,
-        .pSubpasses = &subpassDescription,
-        .dependencyCount = 0,
-        .pDependencies = nullptr};
-
-    if (VkResult result = vkCreateRenderPass(context->device, &renderPassCreateInfo, 0, &context->renderPass); result != VK_SUCCESS)
+    if (!context->renderPass)
     {
         return VulkanContextResult::FailedCreateRenderPass;
     }
@@ -638,7 +592,7 @@ NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .renderPass = context->renderPass,
+        .renderPass = context->renderPass->getHandle(),
         .attachmentCount = 1,
         .width = context->width,
         .height = context->height,
@@ -890,7 +844,7 @@ VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Com
     
         VkClearValue clearValue = { 0.1f, 0.1, 0.1f, 1.0f };
         VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
-        renderPassBeginInfo.renderPass = context->renderPass;
+        renderPassBeginInfo.renderPass = context->renderPass->getHandle();
         renderPassBeginInfo.framebuffer = context->framebuffers[frameIndex];
         renderPassBeginInfo.renderArea = { {0, 0}, {context->width, context->height} };
         renderPassBeginInfo.clearValueCount = 1;
@@ -969,7 +923,7 @@ void terminateVulkan(VulkanContext *context)
             vkDestroyFramebuffer(context->device, framebuffer, nullptr);
         }
 
-        vkDestroyRenderPass(context->device, context->renderPass, nullptr);
+        context->renderPass.reset();
 
         for (VkImageView view : context->imageViews)
         {
@@ -1442,7 +1396,7 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 	graphicsPipelineCreateInfo.pMultisampleState = &multisampleState;
 	graphicsPipelineCreateInfo.pColorBlendState = &colorBlendState;
 	graphicsPipelineCreateInfo.layout = pipeline.layout;
-	graphicsPipelineCreateInfo.renderPass = context->renderPass;
+	graphicsPipelineCreateInfo.renderPass = context->renderPass->getHandle();
 	graphicsPipelineCreateInfo.subpass = 0;
 
 	if(VkResult result = vkCreateGraphicsPipelines(context->device, VK_NULL_HANDLE, 1, &graphicsPipelineCreateInfo, nullptr, &pipeline.pipeline); result != VK_SUCCESS) {
