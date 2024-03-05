@@ -23,6 +23,7 @@
 #include "CmdBindVertexBuffers.hpp"
 #include "CmdDrawIndexed.hpp"
 #include "RenderPass.hpp"
+#include "CommandPool.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -100,10 +101,8 @@ using InstanceExtensionList = std::vector<const char *>;
 using VulkanImageList = std::vector<VkImage>;
 using VulkanImageViewList = std::vector<VkImageView>;
 using VulkanFramebufferList = std::vector<VkFramebuffer>;
-using VulkanCommandBufferList = std::vector<VkCommandBuffer>;
 using VulkanFenceList = std::vector<VkFence>;
 using VulkanSemaphoreList = std::vector<VkSemaphore>;
-using VulkanCommandPoolList = std::vector<VkCommandPool>;
 using VulkanDescriptorSetLayoutBindingList = std::vector<VkDescriptorSetLayoutBinding>;
 using DescriptorPoolSizeList = std::vector<VkDescriptorPoolSize>;
 using DescriptorSetList = std::vector<VkDescriptorSet>;
@@ -134,10 +133,10 @@ struct VulkanContext
 
     VulkanFramebufferList framebuffers;
 
-    VulkanCommandPoolList commandPools;
+    CommandPools commandPools;
     VkCommandPool transferCommandPool;
 
-    VulkanCommandBufferList commandBuffers;
+    CommandBuffers commandBuffers;
 
     uint32_t amountOfFrames;
 
@@ -610,24 +609,11 @@ NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult createCommandPool(VulkanContext *context)
-{
-    if (!context->device)
-        return FailedCreateCommandPool;
-
-    VkCommandPoolCreateInfo commandPoolCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-        .queueFamilyIndex = context->graphics.familyIndex};
+NODISCARD VulkanContextResult createCommandPool(VulkanContext *context) {
 
     context->commandPools.resize(context->amountOfFrames);
-    for (unsigned long x = 0; x < context->amountOfFrames; x++)
-    {
-        if (VkResult result = vkCreateCommandPool(context->device, &commandPoolCreateInfo, nullptr, &context->commandPools[x]); result != VK_SUCCESS)
-        {
-            return VulkanContextResult::FailedCreateCommandPool;
-        }
+    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
+        context->commandPools[x] = CommandPool::create(context->device, context->graphics.familyIndex);
     }
 
     return VulkanContextResult::Success;
@@ -654,23 +640,11 @@ NODISCARD VulkanContextResult createTransferCommandPool(VulkanContext * context)
     return VulkanContextResult::Success;
 }
 
-NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context)
-{
+NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context) {
 
     context->commandBuffers.resize(context->amountOfFrames);
-    for (uint32_t x = 0; x < context->amountOfFrames; x++)
-    {
-        VkCommandBufferAllocateInfo commandBufferAllocateInfo{
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .commandPool = context->commandPools[x],
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = 1};
-
-        if (VkResult result = vkAllocateCommandBuffers(context->device, &commandBufferAllocateInfo, &context->commandBuffers[x]); result != VK_SUCCESS)
-        {
-            return VulkanContextResult::FailedAllocateCommandBuffer;
-        }
+    for (uint32_t x = 0; x < context->amountOfFrames; x++) {
+        context->commandBuffers[x] = context->commandPools[x]->allocateCommandBuffer();
     }
 
     return VulkanContextResult::Success;
@@ -820,7 +794,6 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
 VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Command>> commands)
 {
         uint32_t frameIndex = context->frameIndex;
-        VkCommandPool commandPool = context->commandPools[frameIndex];
         VkFence fence = context->fences[frameIndex];
 
         VkSemaphore release = context->waitSemaphore[frameIndex];
@@ -828,7 +801,7 @@ VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Com
 
         VkResult result = vkWaitForFences(context->device, 1, &fence, VK_TRUE, UINT64_MAX);
         result = vkResetFences(context->device, 1, &fence);
-        vkResetCommandPool(context->device, commandPool, 0);
+        context->commandPools[frameIndex]->reset();
 
         uint32_t imageIndex;
         result = vkAcquireNextImageKHR(context->device, context->swapchain, UINT64_MAX, acquire, VK_NULL_HANDLE, &imageIndex);
@@ -839,7 +812,7 @@ VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Com
 
         VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
-        result = vkBeginCommandBuffer(context->commandBuffers[frameIndex], &beginInfo);
+        result = vkBeginCommandBuffer(context->commandBuffers[frameIndex]->getHandle(), &beginInfo);
         
     
         VkClearValue clearValue = { 0.1f, 0.1, 0.1f, 1.0f };
@@ -849,18 +822,16 @@ VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Com
         renderPassBeginInfo.renderArea = { {0, 0}, {context->width, context->height} };
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearValue;
-        vkCmdBeginRenderPass(context->commandBuffers[frameIndex], &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        auto cmdBuffer = CommandBuffer::create(context->commandBuffers[frameIndex]);
+        vkCmdBeginRenderPass(context->commandBuffers[frameIndex]->getHandle(), &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
         
         for(auto command : commands) {
-            command->record(cmdBuffer);
+            command->record(context->commandBuffers[frameIndex]);
         }
 
-        vkCmdEndRenderPass(context->commandBuffers[frameIndex]);
-        vkEndCommandBuffer(context->commandBuffers[frameIndex]);
+        vkCmdEndRenderPass(context->commandBuffers[frameIndex]->getHandle());
+        vkEndCommandBuffer(context->commandBuffers[frameIndex]->getHandle());
 
-        VkCommandBuffer commandBuffer = context->commandBuffers[frameIndex];
+        VkCommandBuffer commandBuffer = context->commandBuffers[frameIndex]->getHandle();
 
         VkSubmitInfo submitInfo = { VK_STRUCTURE_TYPE_SUBMIT_INFO };
         submitInfo.commandBufferCount = 1;
@@ -915,8 +886,8 @@ void terminateVulkan(VulkanContext *context)
 
         vkDestroyCommandPool(context->device, context->transferCommandPool, nullptr);
 
-        for(VkCommandPool pool : context->commandPools) {
-            vkDestroyCommandPool(context->device, pool, nullptr);
+        for(auto& pool : context->commandPools) {
+            pool.reset();
         }
 
         for (VkFramebuffer framebuffer : context->framebuffers) {

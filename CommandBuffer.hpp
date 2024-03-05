@@ -22,13 +22,18 @@ class CommandBuffer : public Inherit<CommandBuffer, ICommandBuffer> {
 
     public:
         CommandBuffer(VkCommandBuffer commandBuffer);
+        
         void draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
         void bindIndexBuffer(VkBuffer buffer, VkIndexType type) override;
         void bindVertexBuffers(uint32_t firstBinding, uint32_t bindingCount, const VkBuffer *pBuffers, const VkDeviceSize *pOffsets) override;
         void drawIndexed(uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
         void bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, VkPipelineLayout layout, uint32_t firstSet, uint32_t descriptorSetCount, const VkDescriptorSet *pDescriptorSets, uint32_t dynamicOffsetCount, const uint32_t *pDynamicOffsets) override;
         void bindPipeline(VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) override;
+
+        VkCommandBuffer getHandle() const;
 };
+
+using CommandBuffers = std::vector<CommandBuffer::Pointer>;
 
 CommandBuffer::CommandBuffer(VkCommandBuffer commandBuffer) : m_commandBuffer(commandBuffer) {}
 
@@ -54,4 +59,8 @@ void CommandBuffer::bindDescriptorSets(VkPipelineBindPoint pipelineBindPoint, Vk
 
 void CommandBuffer::bindPipeline(VkPipelineBindPoint pipelineBindPoint, VkPipeline pipeline) {
     vkCmdBindPipeline(m_commandBuffer, pipelineBindPoint, pipeline);
+}
+
+VkCommandBuffer CommandBuffer::getHandle() const {
+    return m_commandBuffer;
 }
