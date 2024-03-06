@@ -24,6 +24,7 @@
 #include "CmdDrawIndexed.hpp"
 #include "RenderPass.hpp"
 #include "CommandPool.hpp"
+#include "Framebuffer.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -100,7 +101,6 @@ using DeviceExtensionList = std::vector<const char *>;
 using InstanceExtensionList = std::vector<const char *>;
 using VulkanImageList = std::vector<VkImage>;
 using VulkanImageViewList = std::vector<VkImageView>;
-using VulkanFramebufferList = std::vector<VkFramebuffer>;
 using VulkanFenceList = std::vector<VkFence>;
 using VulkanSemaphoreList = std::vector<VkSemaphore>;
 using VulkanDescriptorSetLayoutBindingList = std::vector<VkDescriptorSetLayoutBinding>;
@@ -131,7 +131,7 @@ struct VulkanContext
     uint32_t width;
     uint32_t height;
 
-    VulkanFramebufferList framebuffers;
+    Framebuffers framebuffers;
 
     CommandPools commandPools;
     VkCommandPool transferCommandPool;
@@ -579,31 +579,11 @@ NODISCARD VulkanContextResult createRenderPass(VulkanContext *context) {
 
 NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context)
 {
-
-    if (context->imageViews.empty())
-        return VulkanContextResult::FailedCreateSwapchainFramebuffer;
-
     context->framebuffers.resize(context->amountOfFrames);
+    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
 
-    for (unsigned long x = 0; x < context->amountOfFrames; x++)
-    {
-        VkFramebufferCreateInfo framebufferCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = 0,
-        .renderPass = context->renderPass->getHandle(),
-        .attachmentCount = 1,
-        .width = context->width,
-        .height = context->height,
-        .layers = 1};
-
-
-        framebufferCreateInfo.pAttachments = &context->imageViews[x];
-
-        if (VkResult result = vkCreateFramebuffer(context->device, &framebufferCreateInfo, nullptr, &context->framebuffers[x]); result != VK_SUCCESS)
-        {
-            return VulkanContextResult::FailedCreateSwapchainFramebuffer;
-        }
+        Framebuffer::Attachments attachments { context->imageViews[x] };
+        context->framebuffers[x] = Framebuffer::create(context->device, context->renderPass, attachments, context->width, context->height);   
     }
 
     return VulkanContextResult::Success;
@@ -818,7 +798,7 @@ VulkanContextResult render(VulkanContext *context, std::span<std::shared_ptr<Com
         VkClearValue clearValue = { 0.1f, 0.1, 0.1f, 1.0f };
         VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
         renderPassBeginInfo.renderPass = context->renderPass->getHandle();
-        renderPassBeginInfo.framebuffer = context->framebuffers[frameIndex];
+        renderPassBeginInfo.framebuffer = context->framebuffers[frameIndex]->getHandle();
         renderPassBeginInfo.renderArea = { {0, 0}, {context->width, context->height} };
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearValue;
@@ -890,8 +870,8 @@ void terminateVulkan(VulkanContext *context)
             pool.reset();
         }
 
-        for (VkFramebuffer framebuffer : context->framebuffers) {
-            vkDestroyFramebuffer(context->device, framebuffer, nullptr);
+        for (auto& framebuffer : context->framebuffers) {
+            framebuffer.reset();
         }
 
         context->renderPass.reset();

@@ -27,6 +27,7 @@ add_executable(engine
     Inherit.hpp
     RenderPass.hpp
     CommandPool.hpp
+    Framebuffer.hpp
 )
 
 if(UNIX)
