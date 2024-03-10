@@ -24,10 +24,18 @@ add_executable(engine
     CmdDrawIndexed.hpp
     Command.hpp 
     CommandBuffer.hpp
+    CommandBuffer.cpp
     Inherit.hpp
     RenderPass.hpp
+    RenderPass.cpp
     CommandPool.hpp
+    CommandPool.cpp
     Framebuffer.hpp
+    Framebuffer.cpp
+    BaseItem.hpp
+    BaseItem.cpp
+    Visitor.hpp
+    Visitor.cpp
 )
 
 if(UNIX)
