@@ -36,6 +36,10 @@ add_executable(engine
     BaseItem.cpp
     Visitor.hpp
     Visitor.cpp
+    PhysicalDevice.hpp
+    PhysicalDevice.cpp
+    QueueFamilies.hpp
+    QueueFamilies.cpp
 )
 
 if(UNIX)

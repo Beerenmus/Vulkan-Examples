@@ -25,6 +25,7 @@
 #include "RenderPass.hpp"
 #include "CommandPool.hpp"
 #include "Framebuffer.hpp"
+#include "PhysicalDevice.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -91,6 +92,7 @@ class SVulkanPipeline {
             pipeline = another.pipeline;
 
             return *this;
+
         }
         
         constexpr SVulkanPipeline operator = (SVulkanPipeline&&) = delete;
@@ -109,10 +111,9 @@ using DescriptorSetList = std::vector<VkDescriptorSet>;
 
 struct VulkanContext
 {
-
     VkInstance instance;
     VkSurfaceKHR surface;
-    VkPhysicalDevice physicalDevice;
+    PhysicalDevice::Pointer physicalDevice;
 
     VulkanQueue graphics;
     VulkanQueue transfer;
@@ -272,56 +273,21 @@ NODISCARD VulkanContextResult choosePhysicalDevice(VulkanContext *context)
 
     if (!bestDevice)
         return VulkanContextResult::NoSuitablePhysicalDevice;
-    context->physicalDevice = bestDevice;
-
+    context->physicalDevice = PhysicalDevice::create(bestDevice, context->surface);
+    
     return VulkanContextResult::Success;
-}
-
-NODISCARD uint32_t findGraphicsQueueFamily(std::vector<VkQueueFamilyProperties> &queueFamilies)
-{
-    uint32_t queueFamilyIndex = 0;
-
-    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++)
-    {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
-        {
-            queueFamilyIndex = i;
-            break;
-        }
-    }
-
-    return queueFamilyIndex;
-}
-
-NODISCARD uint32_t findTransferQueueFamily(std::vector<VkQueueFamilyProperties> &queueFamilies) {
-
-    uint32_t queueFamilyIndex = 0;
-
-    for (uint32_t i = 0; i < static_cast<uint32_t>(queueFamilies.size()); i++)
-    {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
-        {
-            queueFamilyIndex = i;
-            break;
-        }
-    }
-
-    return queueFamilyIndex;
 }
 
 NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensionList extensions)
 {
-    VkPhysicalDevice physicalDevice = context->physicalDevice;
+    VkPhysicalDevice physicalDevice = context->physicalDevice->getHandle();
     if (!physicalDevice)
         return FailedCreateDevice;
 
-    uint32_t amountOfDeviceQueueFamilyProperties;
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &amountOfDeviceQueueFamilyProperties, nullptr);
-    std::vector<VkQueueFamilyProperties> queueFamilies(amountOfDeviceQueueFamilyProperties);
-    vkGetPhysicalDeviceQueueFamilyProperties(physicalDevice, &amountOfDeviceQueueFamilyProperties, &queueFamilies[0]);
+    const QueueFamilies& queueFamilies = context->physicalDevice->getQueueFamilies();
 
-    uint32_t graphicsfamilyIndex = findGraphicsQueueFamily(queueFamilies);
-    uint32_t transferFamilyIndex = findTransferQueueFamily(queueFamilies);
+    uint32_t graphicsfamilyIndex = queueFamilies.getQueueGraphicsFamily();
+    uint32_t transferFamilyIndex = queueFamilies.getQueueTransferFamily();
 
     float priorities[] = {1.0f, 1.0};
 
@@ -474,31 +440,24 @@ NODISCARD VkSurfaceFormatKHR chooseSurfaceFormat(const VkPhysicalDevice physical
 
 NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, VkImageUsageFlags usage)
 {
-    VkSurfaceKHR surface = context->surface;
-
-    uint32_t amountOfSurfaceFormats;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &amountOfSurfaceFormats, nullptr);
-    std::vector<VkSurfaceFormatKHR> availableSurfaceFormats(amountOfSurfaceFormats);
-    vkGetPhysicalDeviceSurfaceFormatsKHR(context->physicalDevice, context->surface, &amountOfSurfaceFormats, &availableSurfaceFormats[0]);
+    const PhysicalDevice::Pointer physicalDevice = context->physicalDevice;
 
     VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physicalDevice, context->surface, &surfaceCapabilities);
+    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physicalDevice->getHandle(), context->surface, &surfaceCapabilities);
 
-    uint32_t amountOfSurfacePresenModes;
-    vkGetPhysicalDeviceSurfacePresentModesKHR(context->physicalDevice, context->surface, &amountOfSurfacePresenModes, nullptr);
-    std::vector<VkPresentModeKHR> availablePresentModes(amountOfSurfacePresenModes);
-    vkGetPhysicalDeviceSurfacePresentModesKHR(context->physicalDevice, context->surface, &amountOfSurfacePresenModes, &availablePresentModes[0]);
+    PhysicalDevice::SurfacePresentModes availablePresentModes = physicalDevice->getSurfacePresentModes();
+    PhysicalDevice::SurfaceFormats availableSurfaceFormats = physicalDevice->getSurfaceFormats();
 
     VkPresentModeKHR presentMode = choosePresentMode(availablePresentModes);
     VkExtent2D extent = chooseExtent(surfaceCapabilities);
-    VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(context->physicalDevice, availableSurfaceFormats, usage);
+    VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(physicalDevice->getHandle(), availableSurfaceFormats, usage);
     VkFormat format = surfaceFormat.format;
 
     VkSwapchainCreateInfoKHR createInfo{
         .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
         .pNext = nullptr,
         .flags = {},
-        .surface = surface,
+        .surface = context->surface,
         .minImageCount = 3,
         .imageFormat = format,
         .imageColorSpace = surfaceFormat.colorSpace,
@@ -703,6 +662,11 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
         return VulkanContextResult::FailedCreateInstance;
     }
 
+    if (createVulkanSurface(context, window) == VulkanContextResult::FailedCreateSurface)
+    {
+        return VulkanContextResult::FailedCreateSurface;
+    }
+
     if (choosePhysicalDevice(context) == VulkanContextResult::NoSuitablePhysicalDevice)
     {
         return VulkanContextResult::NoSuitablePhysicalDevice;
@@ -711,11 +675,6 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
     if (createDevice(context, deviceExtensions) == VulkanContextResult::FailedCreateDevice)
     {
         return VulkanContextResult::FailedCreateDevice;
-    }
-
-    if (createVulkanSurface(context, window) == VulkanContextResult::FailedCreateSurface)
-    {
-        return VulkanContextResult::FailedCreateSurface;
     }
 
     if (createVulkanSwapchain(context, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) == VulkanContextResult::FailedCreateSwapchain)
@@ -903,7 +862,7 @@ void terminateVulkan(VulkanContext *context)
 std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {   
     VkPhysicalDeviceMemoryProperties memoryProperties;
-    vkGetPhysicalDeviceMemoryProperties(context->physicalDevice, &memoryProperties);
+    vkGetPhysicalDeviceMemoryProperties(context->physicalDevice->getHandle(), &memoryProperties);
 
     for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < memoryProperties.memoryTypeCount; ++memoryTypeIndex)
     {
