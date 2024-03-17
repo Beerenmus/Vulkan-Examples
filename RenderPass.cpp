@@ -72,6 +72,7 @@ RenderPass::~RenderPass() {
     RenderPass::Subpasses subpasses { subpass };
 
     VkSubpassDependency dependency;
+    dependency.dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
     dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
