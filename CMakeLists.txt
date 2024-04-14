@@ -38,8 +38,16 @@ add_executable(engine
     Visitor.cpp
     PhysicalDevice.hpp
     PhysicalDevice.cpp
-    QueueFamilies.hpp
-    QueueFamilies.cpp
+    Device.hpp
+    Device.cpp
+    QueueSetting.hpp
+    QueueSetting.cpp
+    Semaphore.cpp
+    Semaphore.hpp
+    Fence.cpp
+    Fence.hpp
+    Queue.cpp
+    Queue.hpp
 )
 
 if(UNIX)

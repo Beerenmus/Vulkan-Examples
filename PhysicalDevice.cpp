@@ -1,8 +1,10 @@
 #include "PhysicalDevice.hpp"
 
-PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) : m_physicalDevice(physicalDevice), m_queueFamilies(physicalDevice), Inherit() {
+PhysicalDevice::PhysicalDevice(VkPhysicalDevice physicalDevice, VkSurfaceKHR surface) : m_physicalDevice(physicalDevice), Inherit() {
+
     m_surfaceFormats = enumerateSurfaceFormats(surface);
     m_surfacePresentModes = enumerateSurfacePresentModes(surface);
+    m_queueFamilyProperties = enumerateQueueFamilyProperties();
 }
 
 PhysicalDevice::SurfaceFormats PhysicalDevice::enumerateSurfaceFormats(VkSurfaceKHR surface) {
@@ -35,12 +37,79 @@ PhysicalDevice::SurfacePresentModes PhysicalDevice::enumerateSurfacePresentModes
     return availablePresentModes;
 }
 
-void PhysicalDevice::visit(Visitor& visitor) {
-    visitor.apply(*this);
+PhysicalDevice::QueueFamilyProperties PhysicalDevice::enumerateQueueFamilyProperties() {
+    
+    uint32_t amountOfDeviceQueueFamilyProperties;
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &amountOfDeviceQueueFamilyProperties, nullptr);
+    std::vector<VkQueueFamilyProperties> queueFamilyProperties(amountOfDeviceQueueFamilyProperties);
+    vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &amountOfDeviceQueueFamilyProperties, &queueFamilyProperties[0]);
+
+    return queueFamilyProperties;
 }
 
-const QueueFamilies& PhysicalDevice::getQueueFamilies() const {
-    return m_queueFamilies;
+const std::optional<uint32_t> PhysicalDevice::getQueueGraphicsFamily() const {
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++) {
+        if ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) != VK_QUEUE_COMPUTE_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) != VK_QUEUE_TRANSFER_BIT) {
+            return x;
+        }
+    }
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++) {
+        if ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) != VK_QUEUE_TRANSFER_BIT) {
+            return x;
+        }
+    }
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++) {
+        if ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT &&
+            (m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT) {
+            return x;
+        }
+    }
+
+    return std::nullopt;
+}
+
+const std::optional<uint32_t> PhysicalDevice::getQueueTransferFamily() const {
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++)
+    {
+        if (((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT) && 
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) != VK_QUEUE_GRAPHICS_BIT) &&
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) != VK_QUEUE_COMPUTE_BIT)) {
+            return x;
+        }
+    }
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++)
+    {
+        if (((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT) && 
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) != VK_QUEUE_GRAPHICS_BIT) &&
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT)) {
+            return x;
+        }
+    }
+
+    for (uint32_t x = 0; x < static_cast<uint32_t>(m_queueFamilyProperties.size()); x++)
+    {
+        if (((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_TRANSFER_BIT) == VK_QUEUE_TRANSFER_BIT) && 
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_GRAPHICS_BIT) == VK_QUEUE_GRAPHICS_BIT) &&
+            ((m_queueFamilyProperties[x].queueFlags & VK_QUEUE_COMPUTE_BIT) == VK_QUEUE_COMPUTE_BIT)) {
+            return x;
+        }
+    }
+
+    return std::nullopt;
+}
+
+void PhysicalDevice::visit(Visitor& visitor) {
+    visitor.apply(*this);
 }
 
 const PhysicalDevice::SurfaceFormats& PhysicalDevice::getSurfaceFormats() const {
@@ -49,6 +118,10 @@ const PhysicalDevice::SurfaceFormats& PhysicalDevice::getSurfaceFormats() const 
 
 const PhysicalDevice::SurfacePresentModes& PhysicalDevice::getSurfacePresentModes() const {
     return m_surfacePresentModes;
+}
+
+const PhysicalDevice::QueueFamilyProperties& PhysicalDevice::getQueueFamilyProperties() const {
+    return m_queueFamilyProperties;
 }
 
 const VkPhysicalDevice PhysicalDevice::getHandle() const {
