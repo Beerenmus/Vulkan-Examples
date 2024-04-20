@@ -40,6 +40,7 @@ RenderPass::~RenderPass() {
 [[nodiscard]] auto createRenderPass(VkDevice device, VkFormat format) -> RenderPass::Pointer {
 
     VkAttachmentDescription attachmentDescription;
+    attachmentDescription.flags = 0;
     attachmentDescription.format = format;
     attachmentDescription.samples = VK_SAMPLE_COUNT_1_BIT;
     attachmentDescription.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;

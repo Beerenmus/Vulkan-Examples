@@ -24,6 +24,7 @@
 #include "Framebuffer.hpp"
 #include "PhysicalDevice.hpp"
 #include "Device.hpp"
+#include "Swapchain.hpp"
 
 #define NODISCARD [[nodiscard]]
 
@@ -37,7 +38,6 @@ enum VulkanContextResult
     NoSuitablePhysicalDevice,
     FailedCreateDevice,
     FailedCreateSwapchain,
-    FailedCreateSwapchainViewImages,
     FailedCreateSwapchainFramebuffer,
     FailedCreateRenderPass,
     FailedCreateCommandPool,
@@ -94,7 +94,6 @@ class SVulkanPipeline {
 using DeviceExtensionList = std::vector<const char *>;
 using InstanceExtensionList = std::vector<const char *>;
 using VulkanImageList = std::vector<VkImage>;
-using VulkanImageViewList = std::vector<VkImageView>;
 using VulkanFenceList = std::vector<VkFence>;
 using VulkanSemaphoreList = std::vector<VkSemaphore>;
 using VulkanDescriptorSetLayoutBindingList = std::vector<VkDescriptorSetLayoutBinding>;
@@ -112,17 +111,9 @@ struct VulkanContext
 
     vks::Device::Pointer device;
 
-    VkSwapchainKHR swapchain;
-
-    VkFormat swapchainFormat;
-
-    VulkanImageList images;
-    VulkanImageViewList imageViews;
+    vks::Swapchain::Pointer swapchain;
 
     RenderPass::Pointer renderPass;
-
-    uint32_t width;
-    uint32_t height;
 
     Framebuffers framebuffers;
 
@@ -130,8 +121,6 @@ struct VulkanContext
     VkCommandPool transferCommandPool;
 
     CommandBuffers commandBuffers;
-
-    uint32_t amountOfFrames;
 
     VulkanFenceList fences;
 
@@ -156,8 +145,6 @@ NODISCARD std::string vulkanErrorToString(VulkanContextResult result)
         return std::string("Error: Failed to create vulkan logical device");
     case VulkanContextResult::FailedCreateSwapchain:
         return std::string("Error: Failed to create vulkan swapchain");
-    case VulkanContextResult::FailedCreateSwapchainViewImages:
-        return std::string("Error: Failed to create vulkan image views");
     case VulkanContextResult::FailedCreateSwapchainFramebuffer:
         return std::string("Error: Failed to create vulkan framebuffer");
     case VulkanContextResult::FailedCreateRenderPass:
@@ -296,165 +283,16 @@ NODISCARD VulkanContextResult createDevice(VulkanContext *context, DeviceExtensi
     return VulkanContextResult::Success;
 }
 
-NODISCARD VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR> &availablePresentModes)
-{
-    VkPresentModeKHR bestMode = VK_PRESENT_MODE_FIFO_KHR;
-
-    for (const auto &availablePresentMode : availablePresentModes)
-    {
-        if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-        {
-            return availablePresentMode;
-        }
-        else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
-        {
-            bestMode = availablePresentMode;
-        }
-    }
-
-    return bestMode;
-}
-
-NODISCARD VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR &capabilities)
-{
-    VkExtent2D extent;
-
-    if (capabilities.currentExtent.width == 0xFFFFFFFF)
-    {
-        extent.width = capabilities.minImageExtent.width;
-    }
-
-    else
-    {
-        extent.width = capabilities.currentExtent.width;
-    }
-
-    if (capabilities.currentExtent.height == 0xFFFFFFFF)
-    {
-        extent.height = capabilities.minImageExtent.height;
-    }
-
-    else
-    {
-        extent.height = capabilities.currentExtent.height;
-    }
-
-    return extent;
-}
-
-NODISCARD VkSurfaceFormatKHR chooseSurfaceFormat(const VkPhysicalDevice physicalDevice, const std::vector<VkSurfaceFormatKHR> &availableFormats, const VkImageUsageFlags usage)
-{
-    uint32_t index = 0;
-    for (uint32_t x = 0; x < availableFormats.size(); x++)
-    {
-
-        VkImageFormatProperties formatProperties;
-
-        VkResult result = vkGetPhysicalDeviceImageFormatProperties(physicalDevice, availableFormats[x].format, VK_IMAGE_TYPE_2D, VK_IMAGE_TILING_OPTIMAL, usage, 0, &formatProperties);
-
-        if (result == VK_ERROR_FORMAT_NOT_SUPPORTED)
-        {
-            std::cout << "Swapchain format does not support requested usage flags" << std::endl;
-        }
-        else
-        {
-            index = x;
-            break;
-        }
-    }
-
-    return availableFormats[index];
-}
-
 NODISCARD VulkanContextResult createVulkanSwapchain(VulkanContext *context, VkImageUsageFlags usage)
 {
-    const PhysicalDevice::Pointer physicalDevice = context->physicalDevice;
-
-    VkSurfaceCapabilitiesKHR surfaceCapabilities;
-    vkGetPhysicalDeviceSurfaceCapabilitiesKHR(context->physicalDevice->getHandle(), context->surface, &surfaceCapabilities);
-
-    PhysicalDevice::SurfacePresentModes availablePresentModes = physicalDevice->getSurfacePresentModes();
-    PhysicalDevice::SurfaceFormats availableSurfaceFormats = physicalDevice->getSurfaceFormats();
-
-    VkPresentModeKHR presentMode = choosePresentMode(availablePresentModes);
-    VkExtent2D extent = chooseExtent(surfaceCapabilities);
-    VkSurfaceFormatKHR surfaceFormat = chooseSurfaceFormat(physicalDevice->getHandle(), availableSurfaceFormats, usage);
-    VkFormat format = surfaceFormat.format;
-
-    VkSwapchainCreateInfoKHR createInfo{
-        .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-        .pNext = nullptr,
-        .flags = {},
-        .surface = context->surface,
-        .minImageCount = 3,
-        .imageFormat = format,
-        .imageColorSpace = surfaceFormat.colorSpace,
-        .imageExtent = surfaceCapabilities.currentExtent,
-        .imageArrayLayers = 1,
-        .imageUsage = usage,
-        .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-        .preTransform = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
-        .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-        .presentMode = presentMode,
-        .oldSwapchain = nullptr};
-
-    if (VkResult result = vkCreateSwapchainKHR(context->device->getHandle(), &createInfo, nullptr, &context->swapchain); result != VK_SUCCESS)
-    {
-        return VulkanContextResult::FailedCreateSwapchain;
-    }
-
-    uint32_t amountOfSwapchainImages;
-    vkGetSwapchainImagesKHR(context->device->getHandle(), context->swapchain, &amountOfSwapchainImages, nullptr);
-    context->images.resize(amountOfSwapchainImages);
-    vkGetSwapchainImagesKHR(context->device->getHandle(), context->swapchain, &amountOfSwapchainImages, &context->images[0]);
-
-    context->swapchainFormat = format;
-
-    context->width = extent.width;
-    context->height = extent.height;
-
-    context->amountOfFrames = context->images.size();
-
-    return VulkanContextResult::Success;
-}
-
-NODISCARD VulkanContextResult createSwapchainViewImages(VulkanContext *context)
-{
-    if (!context->swapchain || context->images.empty())
-        return VulkanContextResult::FailedCreateSwapchainViewImages;
-
-    context->imageViews.resize(context->amountOfFrames);
-
-    VkImageViewCreateInfo imageViewCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .pNext = nullptr,
-        .flags = {},
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = context->swapchainFormat,
-        .components = {
-            .r = VK_COMPONENT_SWIZZLE_R,
-            .g = VK_COMPONENT_SWIZZLE_G,
-            .b = VK_COMPONENT_SWIZZLE_B,
-            .a = VK_COMPONENT_SWIZZLE_A},
-        .subresourceRange{.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT, .baseMipLevel = 0, .levelCount = 1, .baseArrayLayer = 0, .layerCount = 1}};
-
-    for (unsigned long x = 0; x < context->amountOfFrames; x++)
-    {
-
-        imageViewCreateInfo.image = context->images[x];
-
-        if (VkResult result = vkCreateImageView(context->device->getHandle(), &imageViewCreateInfo, nullptr, &context->imageViews[x]); result != VK_SUCCESS)
-        {
-            return VulkanContextResult::FailedCreateSwapchainViewImages;
-        }
-    }
+    context->swapchain = vks::Swapchain::create(context->device, context->physicalDevice, context->surface, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
 
     return VulkanContextResult::Success;
 }
 
 NODISCARD VulkanContextResult createRenderPass(VulkanContext *context) {
 
-   context->renderPass = createRenderPass(context->device->getHandle(), context->swapchainFormat);
+   context->renderPass = createRenderPass(context->device->getHandle(), context->swapchain->getFormat());
 
     if (!context->renderPass)
     {
@@ -466,11 +304,11 @@ NODISCARD VulkanContextResult createRenderPass(VulkanContext *context) {
 
 NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context)
 {
-    context->framebuffers.resize(context->amountOfFrames);
-    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
-
-        Framebuffer::Attachments attachments { context->imageViews[x] };
-        context->framebuffers[x] = Framebuffer::create(context->device->getHandle(), context->renderPass, attachments, context->width, context->height);   
+    context->framebuffers.resize(context->swapchain->getNumImages());
+    for (unsigned long x = 0; x < context->swapchain->getNumImages(); x++) {
+        VkImageView imageView = context->swapchain->getImageViews().at(x)->getHandle();
+        Framebuffer::Attachments attachments { imageView };
+        context->framebuffers[x] = Framebuffer::create(context->device->getHandle(), context->renderPass, attachments, context->swapchain->getWidth(), context->swapchain->getHeight());   
     }
 
     return VulkanContextResult::Success;
@@ -478,8 +316,8 @@ NODISCARD VulkanContextResult createSwapchainFramebuffers(VulkanContext *context
 
 NODISCARD VulkanContextResult createCommandPool(VulkanContext *context) {
 
-    context->commandPools.resize(context->amountOfFrames);
-    for (unsigned long x = 0; x < context->amountOfFrames; x++) {
+    context->commandPools.resize(context->swapchain->getNumImages());
+    for (unsigned long x = 0; x < context->swapchain->getNumImages(); x++) {
         context->commandPools[x] = CommandPool::create(context->device->getHandle(), context->graphics->getFamilyIndex());
     }
 
@@ -509,8 +347,8 @@ NODISCARD VulkanContextResult createTransferCommandPool(VulkanContext * context)
 
 NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context) {
 
-    context->commandBuffers.resize(context->amountOfFrames);
-    for (uint32_t x = 0; x < context->amountOfFrames; x++) {
+    context->commandBuffers.resize(context->swapchain->getNumImages());
+    for (uint32_t x = 0; x < context->swapchain->getNumImages(); x++) {
         context->commandBuffers[x] = context->commandPools[x]->allocateCommandBuffer();
     }
 
@@ -520,14 +358,14 @@ NODISCARD VulkanContextResult allocateCommandBuffer(VulkanContext *context) {
 NODISCARD VulkanContextResult createFence(VulkanContext *context)
 {
 
-    context->fences.resize(context->amountOfFrames);
+    context->fences.resize(context->swapchain->getNumImages());
 
     VkFenceCreateInfo fenceCreateInfo{
         .sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
         .pNext = nullptr,
         .flags = VK_FENCE_CREATE_SIGNALED_BIT};
 
-    for (uint32_t x = 0; x < context->amountOfFrames; x++)
+    for (uint32_t x = 0; x < context->swapchain->getNumImages(); x++)
     {
 
         if (VkResult result = vkCreateFence(context->device->getHandle(), &fenceCreateInfo, nullptr, &context->fences[x]); result != VK_SUCCESS)
@@ -542,8 +380,8 @@ NODISCARD VulkanContextResult createFence(VulkanContext *context)
 NODISCARD VulkanContextResult createSemaphore(VulkanContext *context)
 {
 
-    context->waitSemaphore.resize(context->amountOfFrames);
-    context->signalSemaphore.resize(context->amountOfFrames);
+    context->waitSemaphore.resize(context->swapchain->getNumImages());
+    context->signalSemaphore.resize(context->swapchain->getNumImages());
 
     VkSemaphoreCreateInfo semaphoreCreateInfo{
         .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
@@ -610,11 +448,6 @@ NODISCARD VulkanContextResult initVulkan(SDL_Window *window, VulkanContext *cont
         return VulkanContextResult::FailedCreateSwapchain;
     }
 
-    if (createSwapchainViewImages(context) == VulkanContextResult::FailedCreateSwapchainViewImages)
-    {
-        return FailedCreateSwapchainViewImages;
-    }
-
     if (createRenderPass(context) == VulkanContextResult::FailedCreateRenderPass)
     {
         return VulkanContextResult::FailedCreateRenderPass;
@@ -666,27 +499,31 @@ VulkanContextResult render(VulkanContext *context, std::vector<std::shared_ptr<C
         VkSemaphore release = context->waitSemaphore[frameIndex];
         VkSemaphore acquire = context->signalSemaphore[frameIndex];
 
-        VkResult result = vkWaitForFences(context->device->getHandle(), 1, &fence, VK_TRUE, UINT64_MAX);
-        result = vkResetFences(context->device->getHandle(), 1, &fence);
-        context->commandPools[frameIndex]->reset();
-
-        uint32_t imageIndex;
-        result = vkAcquireNextImageKHR(context->device->getHandle(), context->swapchain, UINT64_MAX, acquire, VK_NULL_HANDLE, &imageIndex);
-        if (result != VK_SUCCESS) {
-            std::cout << "Error: Acquire Next Image" << std::endl;
+        if(VkResult result = vkWaitForFences(context->device->getHandle(), 1, &fence, VK_TRUE, UINT64_MAX); result != VK_SUCCESS) {
+            throw std::runtime_error("Error: render() Failed to wait for fences");
         }
 
+        if(VkResult result = vkResetFences(context->device->getHandle(), 1, &fence); result != VK_SUCCESS) {
+            throw std::runtime_error("Error: render() Failed to reset fences");
+        }
+        
+        context->commandPools[frameIndex]->reset();
+
+        auto[result, imageIndex] = context->swapchain->acquireNextImage(UINT64_MAX, acquire);
+
+        if(result != VK_SUCCESS) {
+            std::cout << "Failed to aquire next image" << std::endl;
+        }
 
         VkCommandBufferBeginInfo beginInfo = { VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
         beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
         result = vkBeginCommandBuffer(context->commandBuffers[frameIndex]->getHandle(), &beginInfo);
         
-    
         VkClearValue clearValue = { 0.1f, 0.1, 0.1f, 1.0f };
         VkRenderPassBeginInfo renderPassBeginInfo = { VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO };
         renderPassBeginInfo.renderPass = context->renderPass->getHandle();
         renderPassBeginInfo.framebuffer = context->framebuffers[frameIndex]->getHandle();
-        renderPassBeginInfo.renderArea = { {0, 0}, {context->width, context->height} };
+        renderPassBeginInfo.renderArea = { {0, 0}, {context->swapchain->getWidth(), context->swapchain->getHeight()} };
         renderPassBeginInfo.clearValueCount = 1;
         renderPassBeginInfo.pClearValues = &clearValue;
         vkCmdBeginRenderPass(context->commandBuffers[frameIndex]->getHandle(), &renderPassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -712,7 +549,7 @@ VulkanContextResult render(VulkanContext *context, std::vector<std::shared_ptr<C
 
         context->graphics->submit(submitInfo, fence);
 
-        VkSwapchainKHR swapchain = context->swapchain;
+        VkSwapchainKHR swapchain = context->swapchain->getHandle();
 
         VkPresentInfoKHR presentInfo = { VK_STRUCTURE_TYPE_PRESENT_INFO_KHR };
         presentInfo.swapchainCount = 1;
@@ -721,11 +558,10 @@ VulkanContextResult render(VulkanContext *context, std::vector<std::shared_ptr<C
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = &release;
 
-
         result = context->graphics->preset(presentInfo);
 
         context->frameIndex++;
-        context->frameIndex = context->frameIndex % context->amountOfFrames;
+        context->frameIndex = context->frameIndex % context->swapchain->getNumImages();
 
     return VulkanContextResult::Success;
 }
@@ -737,7 +573,6 @@ void terminateVulkan(VulkanContext *context)
 
     if (device)
     {
-
         for (VkSemaphore &semaphore : context->waitSemaphore)
         {
             vkDestroySemaphore(context->device->getHandle(), semaphore, nullptr);
@@ -765,14 +600,7 @@ void terminateVulkan(VulkanContext *context)
 
         context->renderPass.reset();
 
-        for (VkImageView view : context->imageViews)
-        {
-            vkDestroyImageView(context->device->getHandle(), view, nullptr);
-        }
-
-        if (context->swapchain) {
-            vkDestroySwapchainKHR(context->device->getHandle(), context->swapchain, nullptr);
-        }
+        context->swapchain.reset();
 
         vkDestroyDevice(context->device->getHandle(), nullptr);
     }
@@ -787,7 +615,6 @@ void terminateVulkan(VulkanContext *context)
         vkDestroyInstance(context->instance, nullptr);
     }
 }
-
 
 std::optional<uint32_t> findMemoryType(VulkanContext *context, uint32_t typeFilter, VkMemoryPropertyFlags properties)
 {   
@@ -1177,12 +1004,12 @@ NODISCARD static std::pair<SVulkanPipeline, VulkanPipelineResult> createPipeline
 	inputAssemblyState.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
 
 	std::array<VkViewport, 1> viewports {};
-	viewports[0].width = static_cast<float>(context->width);
-	viewports[0].height = static_cast<float>(context->height);
+	viewports[0].width = static_cast<float>(context->swapchain->getWidth());
+	viewports[0].height = static_cast<float>(context->swapchain->getHeight());
 
 	std::array<VkRect2D, 1> scissors {};
-	scissors[0].extent.width = context->width;
-	scissors[0].extent.height = context->height;
+	scissors[0].extent.width = context->swapchain->getWidth();
+	scissors[0].extent.height = context->swapchain->getHeight();
 
 	VkPipelineViewportStateCreateInfo viewportState {};
     viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -1414,16 +1241,16 @@ int main()
 
     camera.pos.wz += 3;
 
-    uniformBuffer.resize(context.amountOfFrames);
+    uniformBuffer.resize(context.swapchain->getNumImages());
 
     for(uint32_t x=0;x<uniformBuffer.size();x++) {
-        uniformBuffer[x].projectionMatrix = createProjectionMatrix(45.f, static_cast<float>(context.width) / context.height, 1.f, 1000.f);
+        uniformBuffer[x].projectionMatrix = createProjectionMatrix(45.f, static_cast<float>(context.swapchain->getWidth()) / context.swapchain->getHeight(), 1.f, 1000.f);
 
         uniformBuffer[x].camera.translate(-camera.pos.wx, -camera.pos.wy, -camera.pos.wz);
         uniformBuffer[x].camera.rows(camera.right, camera.up, camera.sight);
     }
 
-    std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.amountOfFrames);
+    std::vector<std::optional<VulkanBuffer>> matrixBuffer(context.swapchain->getNumImages());
     for(uint32_t x=0;x<matrixBuffer.size();x++) {
         if(matrixBuffer[x] = createBuffer(&context, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT, uniformBuffer); !matrixBuffer[x].has_value()) {
             return EXIT_FAILURE;
@@ -1448,12 +1275,12 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::vector<std::optional<VkDescriptorSet>> descriptorSetList(context.amountOfFrames);
-    for(uint32_t x=0;x<context.amountOfFrames;x++) {
+    std::vector<std::optional<VkDescriptorSet>> descriptorSetList(context.swapchain->getNumImages());
+    for(uint32_t x=0;x<context.swapchain->getNumImages();x++) {
         descriptorSetList[x] = createDescriptor(&context, descriptorPool.value(), descriptorSetLayout.value());
     }
 
-    for(uint32_t x=0;x<context.amountOfFrames;x++) {
+    for(uint32_t x=0;x<context.swapchain->getNumImages();x++) {
         updateDescriptorBuffer(&context, matrixBuffer[x].value().buffer, sizeof(UniformBuffer), descriptorSetList[x].value(), 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
     }
 
@@ -1466,8 +1293,8 @@ int main()
         return EXIT_FAILURE;
     }
 
-    std::vector<std::vector<std::shared_ptr<Command>>> commands(context.amountOfFrames);
-    for(uint32_t x=0; x<context.amountOfFrames; x++) {
+    std::vector<std::vector<std::shared_ptr<Command>>> commands(context.swapchain->getNumImages());
+    for(uint32_t x=0; x<context.swapchain->getNumImages(); x++) {
         commands[x].push_back(CmdBindVertexBuffers::create(0, buffer->buffer));
         commands[x].push_back(CmdBindIndexBuffer::create(indicesBuffer.value().buffer, VK_INDEX_TYPE_UINT16));
         commands[x].push_back(CmdBindDescriptorSets::create(pipeline.first.layout, 0, std::vector<VkDescriptorSet> { descriptorSetList[x].value() }));
@@ -1480,7 +1307,7 @@ int main()
     bool running = true;
     while (handleMessage()) {
     
-        for(uint32_t x=0;x<context.amountOfFrames;x++) {
+        for(uint32_t x=0;x<context.swapchain->getNumImages();x++) {
             uniformBuffer[x].modelMatrix.rotate_z(0.001);
             updateUniformBuffer(&context, matrixBuffer[x].value().memory, sizeof(UniformBuffer), &uniformBuffer[x]);
 

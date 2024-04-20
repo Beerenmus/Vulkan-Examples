@@ -48,6 +48,10 @@ add_executable(engine
     Fence.hpp
     Queue.cpp
     Queue.hpp
+    Swapchain.hpp
+    Swapchain.cpp
+    ImageView.hpp
+    ImageView.cpp
 )
 
 if(UNIX)
