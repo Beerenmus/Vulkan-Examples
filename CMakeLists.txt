@@ -16,3 +16,4 @@ target_link_libraries(Base INTERFACE Vulkan::Vulkan SDL3::SDL3)
 include(cmake/compile_shaders.cmake)
 
 add_subdirectory(examples/hello_world)
+add_subdirectory(examples/dynamic_rendering)

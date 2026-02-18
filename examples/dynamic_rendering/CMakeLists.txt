@@ -1,0 +1,3 @@
+add_executable(dynamic_rendering main.cpp)
+target_link_libraries(dynamic_rendering PRIVATE Base)
+compile_shaders(dynamic_rendering)
