@@ -1,0 +1,3 @@
+add_executable(vertex_staging_buffer main.cpp)
+target_link_libraries(vertex_staging_buffer PRIVATE Base)
+compile_shaders(vertex_staging_buffer)
