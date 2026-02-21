@@ -94,7 +94,7 @@ struct Vertex {
     }
 };
 
-struct VertexBuffer {
+struct Buffer {
 
     VkBuffer buffer;
     VkDeviceMemory memory;
@@ -102,12 +102,14 @@ struct VertexBuffer {
     void destroy(VkDevice device) const;
 };
 
-void VertexBuffer::destroy(VkDevice device) const {
+using VertexBuffer = Buffer;
+
+void Buffer::destroy(VkDevice device) const {
     vkFreeMemory(device, memory, nullptr);
     vkDestroyBuffer(device, buffer, nullptr);
 }
 
-VertexBuffer buffer = {};
+Buffer buffer = {};
 
 constexpr  std::array<Vertex, 3> vertices = {
     Vertex {{0, -0.5}, {1, 0, 0}},
@@ -614,29 +616,28 @@ uint32_t findMemory(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     std::exit(EXIT_FAILURE);
 }
 
-VertexBuffer createVertexBuffer(const std::span<const Vertex> vertices) {
-
-    VertexBuffer vertexBuffer {};
+Buffer createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties) {
 
     VkBufferCreateInfo vertexBufferCreateInfo {};
     vertexBufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     vertexBufferCreateInfo.pNext = nullptr;
     vertexBufferCreateInfo.flags = 0;
-    vertexBufferCreateInfo.size = sizeof(Vertex) * vertices.size();;
-    vertexBufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+    vertexBufferCreateInfo.size = size;
+    vertexBufferCreateInfo.usage = usage;
     vertexBufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     vertexBufferCreateInfo.queueFamilyIndexCount = 0;
     vertexBufferCreateInfo.pQueueFamilyIndices = nullptr;
 
-    if (vkCreateBuffer(device, &vertexBufferCreateInfo, nullptr, &vertexBuffer.buffer) != VK_SUCCESS) {
+    VkBuffer buffer {};
+    if (vkCreateBuffer(device, &vertexBufferCreateInfo, nullptr, &buffer) != VK_SUCCESS) {
         std::cout << "Vertex Buffer konnte nicht erstellt werden" << std::endl;
         std::exit(EXIT_FAILURE);
     }
 
     VkMemoryRequirements memoryRequirements;
-    vkGetBufferMemoryRequirements(device, vertexBuffer.buffer, &memoryRequirements);
+    vkGetBufferMemoryRequirements(device, buffer, &memoryRequirements);
 
-    uint32_t memoryTypeIndex = findMemory(memoryRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+    uint32_t memoryTypeIndex = findMemory(memoryRequirements.memoryTypeBits, properties);
 
     VkMemoryAllocateInfo memoryAllocateInfo {};
     memoryAllocateInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -644,19 +645,29 @@ VertexBuffer createVertexBuffer(const std::span<const Vertex> vertices) {
     memoryAllocateInfo.allocationSize = memoryRequirements.size;
     memoryAllocateInfo.memoryTypeIndex = memoryTypeIndex;
 
-    if (vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &vertexBuffer.memory) != VK_SUCCESS) {
+    VkDeviceMemory memory {};
+    if (vkAllocateMemory(device, &memoryAllocateInfo, nullptr, &memory) != VK_SUCCESS) {
         std::cout << "Memory konnte nicht reserviert werden" << std::endl;
         std::exit(EXIT_FAILURE);
     }
 
-    vkBindBufferMemory(device, vertexBuffer.buffer, vertexBuffer.memory, 0);
+    vkBindBufferMemory(device, buffer, memory, 0);
+
+    return { buffer, memory };
+}
+
+VertexBuffer createVertexBuffer(std::span<const Vertex> vertices) {
+
+    const VkDeviceSize size = vertices.size() * sizeof(Vertex);
+
+    const VertexBuffer buffer = createBuffer(size, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
 
     void* data;
-    vkMapMemory(device, vertexBuffer.memory, 0, vertexBufferCreateInfo.size, 0, &data);
-    memcpy(data, vertices.data(), static_cast<size_t>(vertexBufferCreateInfo.size));
-    vkUnmapMemory(device, vertexBuffer.memory);
+    vkMapMemory(device, buffer.memory, 0, size, 0, &data);
+    memcpy(data, vertices.data(), static_cast<size_t>(size));
+    vkUnmapMemory(device, buffer.memory);
 
-    return vertexBuffer;
+    return buffer;
 }
 
 void recordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
